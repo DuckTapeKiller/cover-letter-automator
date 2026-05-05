@@ -1,0 +1,10 @@
+{
+	"id": "cover-letter-automator",
+	"name": "Cover Letter Automator",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Automatically generate tailored cover letters as .docx files using a local Ollama LLM.",
+	"author": "DuckTapeKiller",
+	"authorUrl": "https://github.com",
+	"isDesktopOnly": true
+}

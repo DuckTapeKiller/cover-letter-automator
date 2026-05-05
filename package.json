@@ -1,0 +1,27 @@
+{
+  "name": "cover-letter-automator",
+  "version": "1.0.0",
+  "description": "Automatically generate cover letters as .docx files using Ollama.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [],
+  "author": "DuckTapeKiller",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "0.19.11",
+    "obsidian": "latest",
+    "typescript": "5.3.3"
+  },
+  "dependencies": {
+    "docx": "^8.5.0",
+    "events": "^3.3.0",
+    "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.14.0",
+    "jspdf": "^4.2.1"
+  }
+}
