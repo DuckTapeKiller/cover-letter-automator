@@ -12,7 +12,7 @@ import { CoverLetterSettings, DEFAULT_SETTINGS, CoverLetterSettingTab } from './
 
 export const PROVIDER_MODELS: Record<string, string[]> = {
     gemini: ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'],
-    claude: ['claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-opus-latest'],
+    claude: ['claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-3-opus-latest', 'claude-haiku-4-5-20251001'],
     openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo']
 };
 
@@ -165,9 +165,9 @@ export default class CoverLetterPlugin extends Plugin {
 
     private async callClaude(prompt: string, modelOverride?: string): Promise<string> {
         if (!this.settings.claudeApiKey) throw new Error('No Anthropic API key — add it in Settings → AI Provider.');
-        let res: Response;
         try {
-            res = await fetch('https://api.anthropic.com/v1/messages', {
+            const response = await requestUrl({
+                url: 'https://api.anthropic.com/v1/messages',
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -180,14 +180,12 @@ export default class CoverLetterPlugin extends Plugin {
                     messages: [{ role: 'user', content: prompt }]
                 })
             });
+            const text = response.json?.content?.[0]?.text as string | undefined;
+            if (!text) throw new Error('Claude returned an empty response.');
+            return text;
         } catch (e: unknown) {
             throw new Error(`Claude API error: ${(e as Error).message}`);
         }
-        if (!res.ok) throw new Error(`Claude API ${res.status}: ${await res.text()}`);
-        const data = await res.json();
-        const text = data?.content?.[0]?.text as string | undefined;
-        if (!text) throw new Error('Claude returned an empty response.');
-        return text;
     }
 
     private async callGemini(prompt: string, modelOverride?: string): Promise<string> {
@@ -221,9 +219,9 @@ export default class CoverLetterPlugin extends Plugin {
 
     private async callOpenAI(prompt: string, modelOverride?: string): Promise<string> {
         if (!this.settings.openaiApiKey) throw new Error('No OpenAI API key — add it in Settings → AI Provider.');
-        let res: Response;
         try {
-            res = await fetch('https://api.openai.com/v1/chat/completions', {
+            const response = await requestUrl({
+                url: 'https://api.openai.com/v1/chat/completions',
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -236,14 +234,12 @@ export default class CoverLetterPlugin extends Plugin {
                     max_tokens: 2048
                 })
             });
+            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
+            if (!text) throw new Error('OpenAI returned an empty response.');
+            return text;
         } catch (e: unknown) {
             throw new Error(`OpenAI API error: ${(e as Error).message}`);
         }
-        if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
-        const data = await res.json();
-        const text = data?.choices?.[0]?.message?.content as string | undefined;
-        if (!text) throw new Error('OpenAI returned an empty response.');
-        return text;
     }
 
     // ─── Body cleaning ───────────────────────────────────────────────────────
@@ -261,7 +257,7 @@ export default class CoverLetterPlugin extends Plugin {
             if (!started) {
                 if (low.startsWith('dear ') || low.includes('sir/madam') || low.includes('whom it may concern')) continue;
                 if (low.startsWith('subject:') || low.startsWith('re:')) continue;
-                if ((compLow && low.includes(compLow) || titleLow && low.includes(titleLow)) && line.length < 60) continue;
+                if (((compLow && low.includes(compLow)) || (titleLow && low.includes(titleLow))) && line.length < 60) continue;
                 if (line.length < 30) continue;
                 started = true;
             }
@@ -373,7 +369,7 @@ export default class CoverLetterPlugin extends Plugin {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
         const bodyHtml = this.cleanBodyLines(aiResponse, company, title)
-            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:3;widows:3;">${esc(l)}</p>`)
+            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:3;widows:3;page-break-inside:avoid;">${esc(l)}</p>`)
             .join('');
 
         const div = document.createElement('div');
@@ -401,7 +397,7 @@ export default class CoverLetterPlugin extends Plugin {
                 image:       { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
                 jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:   { mode: 'css' }
+                pagebreak:   { mode: ['css', 'legacy'], avoid: 'p' }
             }).output('blob');
             document.body.removeChild(div);
 
@@ -462,17 +458,20 @@ export default class CoverLetterPlugin extends Plugin {
             let bin = '';
             const chunk = 8192;
             for (let i = 0; i < bytes.length; i += chunk)
-                bin += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunk)));
+                bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
             return btoa(bin);
         };
         const strToB64 = (s: string): string =>
             toB64(new TextEncoder().encode(s).buffer as ArrayBuffer);
 
+        const wrapB64 = (b64: string): string =>
+            b64.match(/.{1,76}/g)?.join('\r\n') ?? b64;
+
         const encodeHeader = (s: string) => `=?UTF-8?B?${strToB64(s)}?=`;
         const encodeParam = (s: string) => `UTF-8''${encodeURIComponent(s)}`;
 
         const parts: string[] = [
-            `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${strToB64(body + '\r\n\r\n')}`
+            `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrapB64(strToB64(body + '\r\n\r\n'))}`
         ];
         for (const att of attachments) {
             const encodedName = encodeParam(att.name);
@@ -481,7 +480,7 @@ export default class CoverLetterPlugin extends Plugin {
                 `Content-Type: ${att.mimeType}; name*=${encodedName}\r\n` +
                 `Content-Transfer-Encoding: base64\r\n` +
                 `Content-Disposition: attachment; filename*=${encodedName}\r\n\r\n` +
-                toB64(att.data)
+                wrapB64(toB64(att.data))
             );
         }
         parts.push(`--${boundary}--`);
@@ -502,6 +501,11 @@ export default class CoverLetterPlugin extends Plugin {
             fs.writeFileSync(tmpFile, eml, 'utf8');
             const err = await shell.openPath(tmpFile);
             if (err) throw new Error(`Could not open mail client: ${err}`);
+
+            // Delayed cleanup for privacy
+            setTimeout(() => {
+                try { fs.unlinkSync(tmpFile); } catch { /* ignore if already gone */ }
+            }, 30000);
         } catch (e: unknown) {
             throw new Error(`Desktop integration failed: ${(e as Error).message}`);
         }
@@ -517,7 +521,7 @@ export default class CoverLetterPlugin extends Plugin {
     }
 
     private async resolveOutputPath(sourceFile: TFile, fileName: string): Promise<string> {
-        const folder = this.settings.outputFolder.trim() || sourceFile.parent?.path || '';
+        const folder = this.settings.outputFolder.trim().replace(/\/+$/, '') || sourceFile.parent?.path || '';
         const base   = folder === '' || folder === '/' ? fileName : `${folder}/${fileName}`;
         if (folder && folder !== '/' && !(await this.app.vault.adapter.exists(folder))) {
             await this.app.vault.createFolder(folder);
@@ -675,6 +679,11 @@ class GeneratorModal extends Modal {
         const progBar  = progWrap.createDiv({ cls: 'cla-progress-bar' });
         progBar.style.width = '0%';
         const status = c.createEl('p', { text: 'Ready.', cls: 'cla-status-text' });
+
+        const setProgress = (pct: number) => {
+            progBar.style.width = `${pct}%`;
+        };
+        const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
         const btn    = c.createEl('button', { text: 'Generate Cover Letter', cls: 'cla-btn' });
 
         btn.addEventListener('click', async () => {
@@ -695,13 +704,28 @@ class GeneratorModal extends Modal {
 
             btn.disabled = true;
             btn.setText('Working…');
-            status.setText('Calling AI…');
+            status.setText('Analysing job note…');
+            setProgress(10);
+
+            // Simulation interval for the "Thinking" phase
+            let currentPct = 10;
+            const progInterval = setInterval(() => {
+                if (currentPct < 75) {
+                    currentPct += Math.random() * 2;
+                    if (currentPct > 75) currentPct = 75;
+                    setProgress(currentPct);
+                }
+            }, 400);
 
             try {
                 const result = await this.plugin.processFile(
                     this.file,
                     pct => {
-                        progBar.style.width = `${pct}%`;
+                        // We use the higher value to prevent jumps backward
+                        if (pct > currentPct) {
+                            currentPct = pct;
+                            setProgress(pct);
+                        }
                         if (pct > 40) status.setText('Drafting body…');
                         if (pct > 80) status.setText(`Saving ${fmt}…`);
                     },
@@ -710,6 +734,9 @@ class GeneratorModal extends Modal {
                     model,
                     provider
                 );
+                
+                clearInterval(progInterval);
+                setProgress(100);
                 status.setText('Done — file saved.');
                 btn.setText('Done!');
 
@@ -719,6 +746,7 @@ class GeneratorModal extends Modal {
                     new EmailDraftModal(this.app, this.plugin, fm, result, cvPath).open();
                 }, 600);
             } catch (e: unknown) {
+                clearInterval(progInterval);
                 status.setText(`Error: ${(e as Error).message}`);
                 btn.disabled = false;
                 btn.setText('Retry');
@@ -760,7 +788,7 @@ class EmailDraftModal extends Modal {
         // — To —
         c.createEl('label', { text: 'To:', cls: 'cla-label' });
         const toIn = c.createEl('input', { type: 'email', cls: 'cla-input' });
-        toIn.value  = (this.frontmatter.Email as string) || (this.frontmatter.Address as string) || '';
+        toIn.value  = (this.frontmatter.Email as string) || '';
 
         // — Subject —
         c.createEl('label', { text: 'Subject:', cls: 'cla-label' });
@@ -814,7 +842,22 @@ class EmailDraftModal extends Modal {
 
         const btnRow  = c.createDiv({ cls: 'cla-btn-row' });
         const closeBtn = btnRow.createEl('button', { text: 'Close', cls: 'cla-btn cla-btn-secondary' });
-        const openBtn  = btnRow.createEl('button', { text: 'Open in Mail App', cls: 'cla-btn' });
+        
+        if (Platform.isMobile) {
+            const copyBtn = btnRow.createEl('button', { text: 'Copy Body', cls: 'cla-btn cla-btn-secondary' });
+            copyBtn.onclick = async () => {
+                const contact    = (this.frontmatter.Contact as string) || '';
+                const salutation = contact ? `Dear ${contact},` : 'Dear Sir/Madam,';
+                const fullBody   = `${salutation}\n\n${bodyEl.value.trim()}\n\nYours sincerely,\n${this.plugin.settings.senderName}`;
+                await navigator.clipboard.writeText(fullBody);
+                new Notice('Email body copied!');
+            };
+        }
+
+        const openBtn  = btnRow.createEl('button', { 
+            text: Platform.isDesktop ? 'Open in Mail App' : 'Open Mail App', 
+            cls: 'cla-btn' 
+        });
         openBtn.disabled = true;   // enabled once body generation resolves
 
         closeBtn.addEventListener('click', () => this.close());
@@ -838,13 +881,19 @@ class EmailDraftModal extends Modal {
                 ];
                 if (cvData && cvName) attachments.push({ name: cvName, data: cvData, mimeType: cvMime });
 
-                await this.plugin.openMailDraft({
-                    to,
-                    from: fromIn.value.trim(),
-                    subject: subIn.value.trim(),
-                    body: fullBody,
-                    attachments
-                });
+                if (Platform.isDesktop) {
+                    await this.plugin.openMailDraft({
+                        to,
+                        from: fromIn.value.trim(),
+                        subject: subIn.value.trim(),
+                        body: fullBody,
+                        attachments
+                    });
+                } else {
+                    // mailto fallback for mobile
+                    const mailto = `mailto:${to}?subject=${encodeURIComponent(subIn.value.trim())}&body=${encodeURIComponent(fullBody)}`;
+                    window.open(mailto);
+                }
 
                 status.setText('Mail app opened with attachments loaded.');
                 openBtn.setText('Opened ✓');
@@ -859,12 +908,20 @@ class EmailDraftModal extends Modal {
         });
 
         // Generate body in background — enable button when ready
-        this.plugin.generateEmailBody(this.frontmatter).then(text => {
+        this.plugin.generateEmailBody(this.frontmatter).then(async text => {
             bodyEl.value    = text;
             bodyEl.disabled = false;
             openBtn.disabled = false;
+            if (Platform.isMobile) {
+                const contact    = (this.frontmatter.Contact as string) || '';
+                const salutation = contact ? `Dear ${contact},` : 'Dear Sir/Madam,';
+                const fullBody   = `${salutation}\n\n${text.trim()}\n\nYours sincerely,\n${this.plugin.settings.senderName}`;
+                await navigator.clipboard.writeText(fullBody);
+                new Notice('Email body copied to clipboard');
+            }
         }).catch(() => {
-            bodyEl.value    = `Please find attached my CV and cover letter in application for the ${jobTitle} position. I would welcome the opportunity to discuss my suitability at your earliest convenience.`;
+            const fallback = `Please find attached my CV and cover letter in application for the ${jobTitle} position. I would welcome the opportunity to discuss my suitability at your earliest convenience.`;
+            bodyEl.value    = fallback;
             bodyEl.disabled = false;
             openBtn.disabled = false;
         });

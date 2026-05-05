@@ -129,10 +129,22 @@
 
 .cla-progress-bar {
     height: 100%;
-    background: var(--interactive-accent);
+    background: linear-gradient(
+        90deg, 
+        var(--interactive-accent) 0%, 
+        rgba(255, 255, 255, 0.4) 50%, 
+        var(--interactive-accent) 100%
+    );
+    background-size: 200% 100%;
     border-radius: 3px;
     transition: width 0.25s ease;
     width: 0%;
+    animation: cla-shimmer 1.5s infinite linear;
+}
+
+@keyframes cla-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 .cla-status-text {

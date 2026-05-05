@@ -60,7 +60,7 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     ollamaUrl: 'http://localhost:11434',
     modelName: 'llama3',
     claudeApiKey: '',
-    claudeModel: 'claude-haiku-4-5',
+    claudeModel: 'claude-3-5-haiku-latest',
     geminiApiKey: '',
     geminiModel: 'gemini-2.5-flash',
     openaiApiKey: '',
@@ -174,14 +174,10 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         // ── AI PROVIDER ──────────────────────────────────────────────────
         const aiSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
         aiSection.open = true;
-        const aiSummary = aiSection.createEl('summary');
-        setIcon(aiSummary, 'bot');
-        aiSummary.createSpan({ text: ' AI Provider' });
+        aiSection.createEl('summary', { text: '◈ AI Providers' });
 
-        // Provider selector — renders conditional sub-settings below it
-        let providerSetting: Setting;
-        providerSetting = new Setting(aiSection)
-            .setName('Provider')
+        new Setting(aiSection)
+            .setName('Active Provider')
             .setDesc('Choose which AI service generates the cover letter body.')
             .addDropdown(dd => {
                 dd.addOption('ollama', 'Ollama (local)');
