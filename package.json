@@ -1,6 +1,6 @@
 {
   "name": "cover-letter-automator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Automatically generate cover letters as .docx files using Ollama.",
   "main": "main.js",
   "scripts": {

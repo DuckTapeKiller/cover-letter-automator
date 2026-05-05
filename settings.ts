@@ -2,11 +2,12 @@ import { App, PluginSettingTab, Setting, setIcon, TFolder, TFile, AbstractInputS
 import type CoverLetterPlugin from './main';
 import { PROVIDER_MODELS } from './main';
 
-export type AiProvider = 'ollama' | 'claude' | 'gemini' | 'openai';
+export type AiProvider = 'ollama' | 'claude' | 'gemini' | 'openai' | 'groq' | 'openrouter';
 
 export interface CoverLetterSettings {
     // Folders
     outputFolder: string;
+    interviewFolder: string;
     // Identity
     senderName: string;
     senderPhone: string;
@@ -36,14 +37,29 @@ export interface CoverLetterSettings {
     // OpenAI API
     openaiApiKey: string;
     openaiModel: string;
+    // Groq API
+    groqApiKey: string;
+    groqModel: string;
+    // OpenRouter API
+    openRouterApiKey: string;
+    openRouterModel: string;
+    // Email
+    // Customisation
+    customBannedWords: string[];
+    customPrompt: string;
     // Email
     cvPaths: { name: string, path: string }[];
     // Language
     language: string;
+    // Signature
+    signaturePath: string;
+    signatureHeight: number;
 }
 
 export const DEFAULT_SETTINGS: CoverLetterSettings = {
     outputFolder: 'Cover Letters',
+    jobsFolder: 'Jobs',
+    interviewFolder: 'Interviews',
     senderName: '',
     senderPhone: '',
     senderEmail: '',
@@ -65,8 +81,43 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     geminiModel: 'gemini-2.5-flash',
     openaiApiKey: '',
     openaiModel: 'gpt-4o-mini',
+    groqApiKey: '',
+    groqModel: 'llama-3.1-70b-versatile',
+    openRouterApiKey: '',
+    openRouterModel: 'mistralai/mistral-7b-instruct:free',
     cvPaths: [],
     language: 'en-GB',
+    signaturePath: '',
+    signatureHeight: 85,
+    customBannedWords: ['honed', 'hone', 'esteemed', 'esteemed company', 'passionate', 'thrilled', 'excited', 'keen interest', 'profoundly', 'invaluable', 'I am writing to express my interest', 'delve', 'tapestry', 'leverage'],
+    customPrompt: `You are a Senior Professional Cover Letter Writer. 
+
+{profile}
+
+{strategy}
+
+TASK: Write a 4-5 paragraph cover letter based on the JOB INFO below.
+
+JOB INFO:
+{jobContent}
+
+CRITICAL CONSTRAINTS (MANDATORY):
+1. START IMMEDIATELY with the first paragraph.
+2. NO HEADER: Do not include addresses, date, or "Dear..." salutations.
+3. NO SALUTATION: Do not write "Dear [Name]". The template handles this.
+4. NO SIGNATURE: Do not include "Regards" or your name.
+5. NO PLACEHOLDERS: No [Name], [Company], etc.
+6. PLAIN TEXT ONLY: No Markdown, No **bolding**, No [[Wikilinks]], No # Headers.
+7. TONE: Senior Executive, Formal, Direct.
+8. LANGUAGE: {language}
+9. DEPTH & DETAIL: Use exactly 4-5 paragraphs. A short or brief response is a failure. Expand on the strategic match between the candidate and the job requirements using full, professional sentences.
+10. RELEVANCY AUDIT: ONLY include skills and experience directly relevant to the job. If the job is administrative/service-oriented, IGNORE academic achievements or over-qualified credentials. Focus on transferable soft skills and execution.
+11. MIRROR THE LEVEL: Adapt your professional persona to the seniority of the role. Do not sound boastful or over-qualified.
+
+BANNED WORDS (DO NOT USE):
+{bannedWords}
+
+IF YOU USE THE BANNED WORDS, ANY MARKDOWN, ANY AMERICAN SPELLINGS, OR IRRELEVANT ACADEMIC BRAGGING, THE TASK IS A FAILURE.`,
 };
 
 export class CoverLetterSettingTab extends PluginSettingTab {
@@ -77,7 +128,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
-    display(): void {
+    async display(): Promise<void> {
         const { containerEl } = this;
         containerEl.empty();
         containerEl.createEl('h2', { text: 'Cover Letter Automator' });
@@ -146,30 +197,43 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         new Setting(profileSection)
             .setName('Professional Summary')
             .addTextArea(t => {
-                t.inputEl.rows = 4;
+                t.inputEl.rows = 6;
+                t.inputEl.style.width = '100%';
+                t.inputEl.style.resize = 'vertical';
                 t.setValue(this.plugin.settings.candidateProfile).onChange(async v => { this.plugin.settings.candidateProfile = v; await this.plugin.saveSettings(); });
             });
 
         new Setting(profileSection)
             .setName('Skills')
             .addTextArea(t => {
-                t.inputEl.rows = 4;
+                t.inputEl.rows = 6;
+                t.inputEl.style.width = '100%';
+                t.inputEl.style.resize = 'vertical';
                 t.setValue(this.plugin.settings.candidateSkills).onChange(async v => { this.plugin.settings.candidateSkills = v; await this.plugin.saveSettings(); });
             });
 
         new Setting(profileSection)
             .setName('Education')
             .addTextArea(t => {
-                t.inputEl.rows = 6;
+                t.inputEl.rows = 8;
+                t.inputEl.style.width = '100%';
+                t.inputEl.style.resize = 'vertical';
                 t.setValue(this.plugin.settings.candidateEducation).onChange(async v => { this.plugin.settings.candidateEducation = v; await this.plugin.saveSettings(); });
             });
 
-        new Setting(profileSection)
-            .setName('Experience')
+        const expSet = new Setting(profileSection)
+            .setName('Work Experience')
+            .setDesc('Your full career history.')
             .addTextArea(t => {
-                t.inputEl.rows = 10;
+                t.inputEl.rows = 15;
+                t.inputEl.style.width = '100%';
+                t.inputEl.style.resize = 'vertical';
                 t.setValue(this.plugin.settings.candidateExperience).onChange(async v => { this.plugin.settings.candidateExperience = v; await this.plugin.saveSettings(); });
             });
+        expSet.settingEl.style.flexDirection = 'column';
+        expSet.settingEl.style.alignItems = 'flex-start';
+        expSet.controlEl.style.width = '100%';
+        expSet.controlEl.style.marginTop = '10px';
 
         // ── AI PROVIDER ──────────────────────────────────────────────────
         const aiSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
@@ -184,6 +248,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 dd.addOption('claude', 'Anthropic Claude (API)');
                 dd.addOption('gemini', 'Google Gemini (API)');
                 dd.addOption('openai', 'OpenAI GPT (API)');
+                dd.addOption('groq', 'Groq (High Speed)');
+                dd.addOption('openrouter', 'OpenRouter (Free/Aggregator)');
                 dd.setValue(this.plugin.settings.aiProvider);
                 dd.onChange(async v => {
                     this.plugin.settings.aiProvider = v as AiProvider;
@@ -193,22 +259,28 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         if (this.plugin.settings.aiProvider === 'ollama') {
+            const ollamaModels = await this.plugin.fetchOllamaModels();
+
             new Setting(aiSection)
                 .setName('Ollama URL')
                 .addText(t => t.setPlaceholder('http://localhost:11434')
                     .setValue(this.plugin.settings.ollamaUrl)
-                    .onChange(async v => { this.plugin.settings.ollamaUrl = v; await this.plugin.saveSettings(); }));
+                    .onChange(async v => { this.plugin.settings.ollamaUrl = v; await this.plugin.saveSettings(); }))
+                .addButton(btn => btn.setButtonText('Refresh Models').onClick(() => this.display()));
 
             new Setting(aiSection)
                 .setName('Model')
-                .setDesc('Select or type your local model.')
+                .setDesc('Select from your local Ollama models.')
                 .addDropdown(dd => {
-                    const common = ['llama3', 'mistral', 'phi3', 'gemma'];
-                    common.forEach(m => dd.addOption(m, m));
+                    if (ollamaModels.length > 0) {
+                        ollamaModels.forEach(m => dd.addOption(m, m));
+                    } else {
+                        ['llama3', 'mistral', 'gemma'].forEach(m => dd.addOption(m, m));
+                    }
                     dd.addOption('custom', 'Custom Model Name...');
 
                     const current = this.plugin.settings.modelName;
-                    dd.setValue(common.includes(current) ? current : 'custom');
+                    dd.setValue(ollamaModels.includes(current) || ['llama3', 'mistral', 'gemma'].includes(current) ? current : 'custom');
 
                     dd.onChange(async v => {
                         if (v !== 'custom') {
@@ -219,7 +291,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     });
                 });
 
-            if (!['llama3', 'mistral', 'phi3', 'gemma'].includes(this.plugin.settings.modelName)) {
+            if (!ollamaModels.includes(this.plugin.settings.modelName) && !['llama3', 'mistral', 'gemma'].includes(this.plugin.settings.modelName)) {
                 new Setting(aiSection)
                     .setName('Custom Ollama Model')
                     .addText(t => t
@@ -357,6 +429,90 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                         }));
             }
         }
+        
+        if (this.plugin.settings.aiProvider === 'groq') {
+            new Setting(aiSection)
+                .setName('Groq API Key')
+                .setDesc('Get yours at console.groq.com')
+                .addText(t => {
+                    t.inputEl.type = 'password';
+                    t.setPlaceholder('gsk_...')
+                        .setValue(this.plugin.settings.groqApiKey)
+                        .onChange(async v => { this.plugin.settings.groqApiKey = v; await this.plugin.saveSettings(); });
+                });
+
+            new Setting(aiSection)
+                .setName('Model')
+                .setDesc('Choose your Groq model.')
+                .addDropdown(dd => {
+                    const models = PROVIDER_MODELS.groq || ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+                    models.forEach(m => dd.addOption(m, m));
+                    dd.addOption('custom', 'Custom Model Name...');
+
+                    const current = this.plugin.settings.groqModel;
+                    dd.setValue(models.includes(current) ? current : 'custom');
+
+                    dd.onChange(async v => {
+                        if (v !== 'custom') this.plugin.settings.groqModel = v;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    });
+                });
+
+            if (!PROVIDER_MODELS.groq?.includes(this.plugin.settings.groqModel)) {
+                new Setting(aiSection)
+                    .setName('Custom Groq Model')
+                    .addText(t => t
+                        .setPlaceholder('llama3-70b-8192')
+                        .setValue(this.plugin.settings.groqModel === 'custom' ? '' : this.plugin.settings.groqModel)
+                        .onChange(async v => {
+                            this.plugin.settings.groqModel = v;
+                            await this.plugin.saveSettings();
+                        }));
+            }
+        }
+
+        if (this.plugin.settings.aiProvider === 'openrouter') {
+            new Setting(aiSection)
+                .setName('OpenRouter API Key')
+                .setDesc('Get yours at openrouter.ai')
+                .addText(t => {
+                    t.inputEl.type = 'password';
+                    t.setPlaceholder('sk-or-...')
+                        .setValue(this.plugin.settings.openRouterApiKey)
+                        .onChange(async v => { this.plugin.settings.openRouterApiKey = v; await this.plugin.saveSettings(); });
+                });
+
+            new Setting(aiSection)
+                .setName('Model')
+                .setDesc('Choose your OpenRouter model (or use Free ones).')
+                .addDropdown(dd => {
+                    const models = PROVIDER_MODELS.openrouter || ['mistralai/mistral-7b-instruct:free', 'google/gemma-7b-it:free', 'openchat/openchat-7b:free'];
+                    models.forEach(m => dd.addOption(m, m));
+                    dd.addOption('custom', 'Custom Model Name...');
+
+                    const current = this.plugin.settings.openRouterModel;
+                    dd.setValue(models.includes(current) ? current : 'custom');
+
+                    dd.onChange(async v => {
+                        if (v !== 'custom') this.plugin.settings.openRouterModel = v;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    });
+                });
+
+            if (!PROVIDER_MODELS.openrouter?.includes(this.plugin.settings.openRouterModel)) {
+                new Setting(aiSection)
+                    .setName('Custom OpenRouter Model')
+                    .addText(t => t
+                        .setPlaceholder('mistralai/mixtral-8x7b-instruct')
+                        .setValue(this.plugin.settings.openRouterModel === 'custom' ? '' : this.plugin.settings.openRouterModel)
+                        .onChange(async v => {
+                            this.plugin.settings.openRouterModel = v;
+                            await this.plugin.saveSettings();
+                        }));
+            }
+        }
 
         // ── DESIGN & FOLDERS ─────────────────────────────────────────────
         const designSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
@@ -381,6 +537,28 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 .onChange(async v => { this.plugin.settings.marginSize = v; await this.plugin.saveSettings(); }));
 
         new Setting(designSection)
+            .setName('Signature Image')
+            .setDesc('Optional: Path to a PNG of your handwritten signature (transparent background recommended).')
+            .addText(t => {
+                new FileSuggest(this.app, t.inputEl);
+                t.setPlaceholder('Assets/signature.png')
+                    .setValue(this.plugin.settings.signaturePath)
+                    .onChange(async v => { this.plugin.settings.signaturePath = v; await this.plugin.saveSettings(); });
+            });
+        
+        new Setting(designSection)
+            .setName('Signature Height')
+            .setDesc('Adjust the size of your signature in the PDF (in pixels). Default: 85.')
+            .addSlider(s => s
+                .setLimits(30, 200, 5)
+                .setValue(this.plugin.settings.signatureHeight)
+                .setDynamicTooltip()
+                .onChange(async v => {
+                    this.plugin.settings.signatureHeight = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(designSection)
             .setName('Output Folder')
             .setDesc('Vault path where generated files are saved.')
             .addText(t => {
@@ -388,6 +566,26 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 t.setPlaceholder('Cover Letters')
                     .setValue(this.plugin.settings.outputFolder)
                     .onChange(async v => { this.plugin.settings.outputFolder = v; await this.plugin.saveSettings(); });
+            });
+
+        new Setting(designSection)
+            .setName('Interview Prep Folder')
+            .setDesc('Vault path where interview playbooks are saved.')
+            .addText(t => {
+                new FolderSuggest(this.app, t.inputEl);
+                t.setPlaceholder('Interviews')
+                    .setValue(this.plugin.settings.interviewFolder)
+                    .onChange(async v => { this.plugin.settings.interviewFolder = v; await this.plugin.saveSettings(); });
+            });
+
+        new Setting(designSection)
+            .setName('Jobs Folder')
+            .setDesc('Vault path where imported job notes are saved.')
+            .addText(t => {
+                new FolderSuggest(this.app, t.inputEl);
+                t.setPlaceholder('Jobs')
+                    .setValue(this.plugin.settings.jobsFolder)
+                    .onChange(async v => { this.plugin.settings.jobsFolder = v; await this.plugin.saveSettings(); });
             });
 
         // ── CV LIBRARY ──────────────────────────────────────────────────
@@ -457,6 +655,47 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 });
             });
+
+        // ── AI CUSTOMISATION ─────────────────────────────────────────────
+        const customSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        customSection.open = false;
+        const customSummary = customSection.createEl('summary');
+        setIcon(customSummary, 'settings-2');
+        customSummary.createSpan({ text: ' AI Customisation (Advanced)' });
+
+        new Setting(customSection)
+            .setName('Custom Banned Words')
+            .setDesc('Comma-separated list of words/phrases the AI is forbidden to use.')
+            .addTextArea(t => t
+                .setValue(this.plugin.settings.customBannedWords.join(', '))
+                .onChange(async v => {
+                    this.plugin.settings.customBannedWords = v.split(',').map(s => s.trim()).filter(Boolean);
+                    await this.plugin.saveSettings();
+                }));
+        customSection.querySelectorAll('textarea').forEach(ta => {
+            ta.style.width = '100%';
+            ta.style.resize = 'vertical';
+            ta.rows = 4;
+        });
+
+        const promptSet = new Setting(customSection)
+            .setName('Base Prompt')
+            .setDesc('Modify the core AI instructions. Use {profile}, {strategy}, {jobContent}, {language}, and {bannedWords}.')
+            .addTextArea(t => {
+                t.inputEl.rows = 30;
+                t.inputEl.style.width = '100%';
+                t.inputEl.style.resize = 'vertical';
+                t.inputEl.style.fontFamily = 'monospace';
+                t.setValue(this.plugin.settings.customPrompt)
+                    .onChange(async v => {
+                        this.plugin.settings.customPrompt = v;
+                        await this.plugin.saveSettings();
+                    });
+            });
+        promptSet.settingEl.style.flexDirection = 'column';
+        promptSet.settingEl.style.alignItems = 'flex-start';
+        promptSet.controlEl.style.width = '100%';
+        promptSet.controlEl.style.marginTop = '10px';
     }
 }
 
