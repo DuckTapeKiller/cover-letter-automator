@@ -1,6 +1,6 @@
 import { Plugin, TFile, Notice, Modal, App, setIcon, requestUrl } from 'obsidian';
 // electron/node imports moved inside functions to prevent mobile crashes
-import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } from 'docx';
 import html2pdf from 'html2pdf.js';
 import { Platform } from 'obsidian';
 import { CoverLetterSettings, DEFAULT_SETTINGS, CoverLetterSettingTab } from './settings';
@@ -13,6 +13,14 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
     openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'],
     groq: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
     openrouter: ['mistralai/mistral-7b-instruct:free', 'google/gemma-7b-it:free', 'openchat/openchat-7b:free']
+};
+
+export const TONE_INSTRUCTIONS: Record<string, string> = {
+    'Standard':       'Senior Executive, Formal, Direct.',
+    'Formal':         'Extremely Formal, Executive, High-Authority. Write at the level of a Harvard Business Review article.',
+    'Brief':          'Concise, Direct, Minimalist. Say more with fewer words. Exactly 3 short paragraphs.',
+    'Aggressive':     'Confident, High-Energy, Results-Driven. Focus heavily on ROI, metrics, and achievements.',
+    'Conversational': 'Professional but approachable and peer-level. Avoid sounding like a subordinate.'
 };
 
 export const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
@@ -153,11 +161,11 @@ export default class CoverLetterPlugin extends Plugin {
             aiText = await this.generateWithAI(mainPrompt, modelOverride, providerOverride, true);
         }
 
-        aiText = this.cleanBody(aiText);
         aiText = aiText
             .replace(/```(?:markdown|docx|text|plain)?\n?/gi, '')
             .replace(/```/g, '')
             .trim();
+        aiText = this.cleanBody(aiText);
 
         onProgress(85);
         const result = format === 'PDF'
@@ -444,6 +452,26 @@ export default class CoverLetterPlugin extends Plugin {
                         })
                     ),
                     new Paragraph({ children: [run('Regards,', 24)], spacing: { before: 300 } }), // 12pt
+                    ...(await (async () => {
+                        if (this.settings.signaturePath) {
+                            const sigFile = this.app.vault.getAbstractFileByPath(this.settings.signaturePath);
+                            if (sigFile instanceof TFile) {
+                                const sigData = await this.app.vault.readBinary(sigFile);
+                                const sigHeight = this.settings.signatureHeight || 85;
+                                return [new Paragraph({
+                                    children: [new ImageRun({
+                                        data: sigData,
+                                        transformation: {
+                                            width:  sigHeight * 2, // approximation for aspect ratio
+                                            height: sigHeight,
+                                        }
+                                    })],
+                                    spacing: { before: 0, after: 0 }
+                                })];
+                            }
+                        }
+                        return [];
+                    })()),
                     new Paragraph({ children: [run(this.settings.senderName, 24, true)] }), // 12pt
                 ]
             }]
@@ -490,7 +518,7 @@ export default class CoverLetterPlugin extends Plugin {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
         const bodyHtml = this.cleanBodyLines(aiResponse, company, title)
-            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:3;widows:3;page-break-inside:avoid;">${esc(l)}</p>`)
+            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:2;widows:2;">${esc(l)}</p>`)
             .join('');
 
         let signatureHtml = '';
@@ -534,7 +562,7 @@ export default class CoverLetterPlugin extends Plugin {
                 image:       { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
                 jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:   { mode: ['css', 'legacy'], avoid: 'p' }
+                pagebreak:   { mode: ['css', 'legacy'] }
             }).output('blob');
             document.body.removeChild(div);
 
@@ -688,21 +716,17 @@ export default class CoverLetterPlugin extends Plugin {
 
         // 1. Fix "I [adjective/past-participle]" common hallucinations
         t = t.replace(/\bI (passionate|interested|excited|thrilled|keen|committed|dedicated)\b/gi, 'I am $1');
-        t = t.replace(/\bI ([a-z]+ed)\b/gi, 'I am $1'); // e.g. "I focused on" -> "I am focused on"
         
-        // 2. Fix CamelCase missing spaces (e.g. "PHPLaravel" or "SeniorDeveloper")
-        t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
-
-        // 3. Normalize punctuation spacing
+        // 2. Normalize punctuation spacing
         t = t.replace(/(\w)([.,;:!?])([A-Z])/g, '$1$2 $3');
 
         // 4. Remove obvious AI preamble
         t = t.replace(/^(Here is a cover letter|Certainly|Sure|I've generated|Below is the cover letter):?\n*/i, '');
 
-        // 5. Fix double spaces
-        t = t.replace(/\s{2,}/g, ' ');
+        // 5. Fix double spaces (but preserve newlines)
+        t = t.replace(/[ \t]{2,}/g, ' ');
 
-        return t;
+        return t.trim();
     }
 }
 
@@ -730,15 +754,6 @@ STRATEGIC DIRECTION:
 
         const bannedWords = settings.customBannedWords.map(w => `- "${w}"`).join('\n');
         const activeTone = tone || settings.defaultTone || 'Standard';
-
-        const TONE_INSTRUCTIONS: Record<string, string> = {
-            'Standard': 'Senior Executive, Formal, Direct.',
-            'Formal': 'Extremely Formal, Executive, High-Authority. Write at the level of a Harvard Business Review article.',
-            'Brief': 'Concise, Direct, Minimalist. Say more with fewer words. Exactly 3 short paragraphs.',
-            'Aggressive': 'Confident, High-Energy, Results-Driven. Focus heavily on ROI, metrics, and achievements.',
-            'Conversational': 'Professional but approachable and peer-level. Avoid sounding like a subordinate.'
-        };
-
         const instruction = TONE_INSTRUCTIONS[activeTone] || TONE_INSTRUCTIONS['Standard'];
 
         let prompt = settings.customPrompt || `You are an expert professional business writer with 20+ years of experience.
@@ -1169,6 +1184,10 @@ class ImportUrlModal extends Modal {
                 const response = await requestUrl({ url });
                 status.setText('Analysing with AI…');
                 
+                const jsonStr = await this.plugin.generateWithAI(
+                    PromptBuilder.buildImportPrompt(response.text),
+                    undefined, undefined, true
+                );
                 const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
                 if (!jsonMatch) throw new Error('AI returned no valid JSON for this page. Try again.');
                 const data = JSON.parse(jsonMatch[0]);
@@ -1413,13 +1432,6 @@ FULL EXPERIENCE: ${s.candidateExperience}
 EDUCATION: ${s.candidateEducation}
 `;
 
-                const TONE_INSTRUCTIONS: Record<string, string> = {
-                    'Standard': 'Senior Executive, Formal, Direct.',
-                    'Formal': 'Extremely Formal, Executive, High-Authority. Write at the level of a Harvard Business Review article.',
-                    'Brief': 'Concise, Direct, Minimalist. Say more with fewer words. Exactly 3 short paragraphs.',
-                    'Aggressive': 'Confident, High-Energy, Results-Driven. Focus heavily on ROI, metrics, and achievements.',
-                    'Conversational': 'Professional but approachable and peer-level. Avoid sounding like a subordinate.'
-                };
                 const activeTone = this.tone || this.plugin.settings.defaultTone || 'Standard';
                 const instruction = TONE_INSTRUCTIONS[activeTone] || TONE_INSTRUCTIONS['Standard'];
 
