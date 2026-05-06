@@ -1,7 +1,7 @@
 {
 	"id": "cover-letter-automator",
 	"name": "Cover Letter Automator",
-	"version": "1.0.4",
+	"version": "1.0.3",
 	"minAppVersion": "1.0.0",
 	"description": "Generate tailored cover letters (PDF or DOCX) using Ollama, Claude, Gemini, or OpenAI, with integrated email drafting.",
 	"author": "DuckTapeKiller",
