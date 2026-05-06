@@ -144,9 +144,9 @@ export default class CoverLetterPlugin extends Plugin {
                 const match = anaRes.match(/\{[\s\S]*\}/);
                 if (match) {
                     const data = JSON.parse(match[0]);
-                    strategy = data.strategy;
-                    gaps = data.gaps;
-                    score = data.score;
+                    strategy = (typeof data.strategy === 'string') ? data.strategy : '';
+                    gaps     = Array.isArray(data.gaps) ? data.gaps : [];
+                    score    = (typeof data.score === 'number') ? data.score : 0;
                 }
             } catch (e) {
                 console.error("Strategy analysis failed, falling back to generic.", e);
@@ -196,6 +196,7 @@ export default class CoverLetterPlugin extends Plugin {
             provider === 'openai' ? this.settings.openaiModel : 
             provider === 'groq'   ? this.settings.groqModel :
             provider === 'openrouter' ? this.settings.openRouterModel :
+            provider === 'lmstudio'  ? this.settings.lmStudioModel :
             this.settings.modelName
         );
 
@@ -205,6 +206,7 @@ export default class CoverLetterPlugin extends Plugin {
             case 'openai':     return this.callOpenAI(prompt, model, isJson);
             case 'groq':       return this.callGroq(prompt, model, isJson);
             case 'openrouter': return this.callOpenRouter(prompt, model, isJson);
+            case 'lmstudio':   return this.callLmStudio(prompt, model);
             default:           return this.callOllama(prompt, model);
         }
     }
@@ -232,6 +234,30 @@ export default class CoverLetterPlugin extends Plugin {
         return data.response as string;
     }
 
+    private async callLmStudio(prompt: string, modelOverride?: string): Promise<string> {
+        const base  = this.settings.lmStudioUrl.replace(/\/$/, '');
+        const model = modelOverride || this.settings.lmStudioModel || 'local-model';
+        try {
+            const response = await requestUrl({
+                url: `${base}/v1/chat/completions`,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.4,
+                    max_tokens: 2048,
+                    stream: false
+                })
+            });
+            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
+            if (!text) throw new Error('LM Studio returned an empty response.');
+            return text;
+        } catch (e: unknown) {
+            throw new Error(`LM Studio Error: ${(e as Error).message}`);
+        }
+    }
+
     async fetchOllamaModels(): Promise<string[]> {
         const url = `${this.settings.ollamaUrl.replace(/\/$/, '')}/api/tags`;
         try {
@@ -241,6 +267,18 @@ export default class CoverLetterPlugin extends Plugin {
             return data.models?.map((m: any) => m.name) || [];
         } catch (e) {
             console.error("Failed to fetch Ollama models:", e);
+            return [];
+        }
+    }
+
+    async fetchLmStudioModels(): Promise<string[]> {
+        const base = this.settings.lmStudioUrl.replace(/\/$/, '');
+        try {
+            const res = await requestUrl({ url: `${base}/v1/models` });
+            const data = res.json;
+            return (data?.data as { id: string }[])?.map(m => m.id) || [];
+        } catch (e) {
+            console.error('Failed to fetch LM Studio models:', e);
             return [];
         }
     }
@@ -385,9 +423,10 @@ export default class CoverLetterPlugin extends Plugin {
             if (!line) continue;
             if (!started) {
                 if (low.startsWith('dear ') || low.includes('sir/madam') || low.includes('whom it may concern')) continue;
-                if (low.startsWith('subject:') || low.startsWith('re:')) continue;
-                if (((compLow && low.includes(compLow)) || (titleLow && low.includes(titleLow))) && line.length < 60) continue;
-                if (line.length < 30) continue;
+                if (low.startsWith('subject:') || low.startsWith('re:') || low.includes('job application')) continue;
+                if (low.includes('[[') && low.includes(']]')) continue; // Skip wikilink headers
+                if (((compLow && low.includes(compLow)) || (titleLow && low.includes(titleLow))) && line.length < 100) continue;
+                if (line.length < 40) continue; // Increased from 30 to catch more fragments
                 started = true;
             }
             out.push(line);
@@ -525,7 +564,7 @@ export default class CoverLetterPlugin extends Plugin {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
         const bodyHtml = this.cleanBodyLines(aiResponse, company, title)
-            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:2;widows:2;">${esc(l)}</p>`)
+            .map(l => `<p style="margin:0 0 11px 0;text-align:justify;orphans:3;widows:3;page-break-inside:avoid;">${esc(l)}</p>`)
             .join('');
 
         let signatureHtml = '';
@@ -539,12 +578,13 @@ export default class CoverLetterPlugin extends Plugin {
                               : sigExt === 'webp' ? 'image/webp'
                               : 'image/png';
                 const sigHeight = this.settings.signatureHeight || 85;
-                signatureHtml = `<div><img src="data:${sigMime};base64,${sigB64}" style="max-height:${sigHeight}px;margin-bottom:-10px;"></div>`;
+                signatureHtml = `<div style="page-break-inside:avoid;"><img src="data:${sigMime};base64,${sigB64}" style="max-height:${sigHeight}px;margin-bottom:-10px;"></div>`;
             }
         }
 
         const div = document.createElement('div');
-        div.style.cssText = `font-family:"${esc(FONT)}",Georgia,"Times New Roman",serif;font-size:12pt;line-height:1.6;color:#000;background:#fff`;
+        const containerWidth = 210 - (2 * (marginMm)); // A4 width in mm
+        div.style.cssText = `font-family:"${esc(FONT)}",Georgia,"Times New Roman",serif;font-size:12pt;line-height:1.5;color:#000;background:#fff;width:${containerWidth}mm;`;
         div.innerHTML = `
             <div style="font-size:12pt;margin-bottom:2px;opacity:0.65;letter-spacing:0.06em;">${esc(selectedField.toUpperCase())}</div>
             <div style="font-size:22pt;font-weight:bold;margin-bottom:0px;">${esc(this.settings.senderName)}</div>
@@ -566,10 +606,10 @@ export default class CoverLetterPlugin extends Plugin {
             const blob: Blob = await (html2pdf() as any).from(div).set({
                 margin:      marginMm,
                 filename:    'cover-letter.pdf',
-                image:       { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-                jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:   { mode: ['css', 'legacy'] }
+                image:       { type: 'jpeg', quality: 1.0 },
+                html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff', letterRendering: true },
+                jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                pagebreak:   { mode: ['css'], avoid: 'p' }
             }).output('blob');
             document.body.removeChild(div);
 
@@ -732,6 +772,9 @@ export default class CoverLetterPlugin extends Plugin {
 
         // 4. Fix double spaces (but preserve newlines)
         t = t.replace(/[ \t]{2,}/g, ' ');
+
+        // 5. Strip any accidental wikilinks [[...]]
+        t = t.replace(/\[\[.*?\]\]/g, '');
 
         return t.trim();
     }
@@ -922,8 +965,12 @@ class GeneratorModal extends Modal {
 
         c.createEl('label', { text: 'AI Provider:', cls: 'cla-label' });
         const providerSel = c.createEl('select', { cls: 'cla-select' });
-        ['gemini', 'openai', 'claude', 'ollama', 'groq', 'openrouter'].forEach(p => {
-            const opt = providerSel.createEl('option', { text: p.toUpperCase(), value: p });
+        const PROVIDER_LABELS: Record<string, string> = {
+            gemini: 'GEMINI', openai: 'OPENAI', claude: 'CLAUDE',
+            ollama: 'OLLAMA', lmstudio: 'LM Studio', groq: 'GROQ', openrouter: 'OPENROUTER'
+        };
+        ['gemini', 'openai', 'claude', 'ollama', 'lmstudio', 'groq', 'openrouter'].forEach(p => {
+            const opt = providerSel.createEl('option', { text: PROVIDER_LABELS[p] ?? p.toUpperCase(), value: p });
             if (p === this.plugin.settings.aiProvider) opt.selected = true;
         });
 
@@ -943,6 +990,22 @@ class GeneratorModal extends Modal {
                     });
                 } else {
                     modelSel.createEl('option', { text: this.plugin.settings.modelName, value: this.plugin.settings.modelName });
+                }
+                return;
+            }
+
+            if (provider === 'lmstudio') {
+                const models = await this.plugin.fetchLmStudioModels();
+                if (models.length > 0) {
+                    models.forEach(m => {
+                        const opt = modelSel.createEl('option', { text: m, value: m });
+                        if (m === this.plugin.settings.lmStudioModel) opt.selected = true;
+                    });
+                } else {
+                    modelSel.createEl('option', {
+                        text: '— Start LM Studio server and load a model first —',
+                        value: ''
+                    });
                 }
                 return;
             }
@@ -1138,7 +1201,7 @@ class GeneratorModal extends Modal {
                 try {
                     const playbook = await this.plugin.generateWithAI(PromptBuilder.buildInterviewPrepPrompt(jobContent, this.plugin.settings), undefined, undefined, true);
                     
-                    const folder = this.plugin.settings.interviewFolder.trim() || 'Interviews';
+                    const folder = this.plugin.settings.interviewFolder.trim().replace(/\/+$/, '') || 'Interviews';
                     if (!(await this.plugin.app.vault.adapter.exists(folder))) await this.plugin.app.vault.createFolder(folder);
                     
                     const fileName = `INTERVIEW PREP - ${fm.Company || 'Company'} - ${fm['Job Title'] || 'Role'}.md`.replace(/[\\/:*?"<>|]/g, '');
@@ -1202,7 +1265,7 @@ class ImportUrlModal extends Modal {
                 const company = (data.company && data.company !== 'null') ? data.company : 'Unknown Company';
                 const title   = (data.title   && data.title   !== 'null') ? data.title   : 'Unknown Role';
 
-                const folder = this.plugin.settings.jobsFolder.trim() || 'Jobs';
+                const folder = this.plugin.settings.jobsFolder.trim().replace(/\/+$/, '') || 'Jobs';
                 if (!(await this.app.vault.adapter.exists(folder))) await this.app.vault.createFolder(folder);
 
                 const fileName = `${company} - ${title}`.replace(/[\\/:*?"<>|]/g, '');

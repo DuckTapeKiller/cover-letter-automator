@@ -2,17 +2,17 @@ import { App, PluginSettingTab, Setting, setIcon, TFolder, TFile, AbstractInputS
 import type CoverLetterPlugin from './main';
 import { PROVIDER_MODELS } from './main';
 
-export type AiProvider = 'ollama' | 'claude' | 'gemini' | 'openai' | 'groq' | 'openrouter';
+export type AiProvider = 'ollama' | 'lmstudio' | 'claude' | 'gemini' | 'openai' | 'groq' | 'openrouter';
 
 export interface CoverLetterSettings {
     // Folders
     outputFolder: string;
     interviewFolder: string;
+    jobsFolder: string;
     // Identity
     senderName: string;
     senderPhone: string;
     senderEmail: string;
-    fromEmail: string;
     candidateProfile: string;
     candidateSkills: string;
     candidateEducation: string;
@@ -28,6 +28,9 @@ export interface CoverLetterSettings {
     // Ollama
     ollamaUrl: string;
     modelName: string;
+    // LM Studio
+    lmStudioUrl: string;
+    lmStudioModel: string;
     // Claude API
     claudeApiKey: string;
     claudeModel: string;
@@ -43,7 +46,6 @@ export interface CoverLetterSettings {
     // OpenRouter API
     openRouterApiKey: string;
     openRouterModel: string;
-    // Email
     // Customisation
     customBannedWords: string[];
     customPrompt: string;
@@ -64,7 +66,6 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     senderName: '',
     senderPhone: '',
     senderEmail: '',
-    fromEmail: '',
     candidateProfile: '',
     candidateSkills: '',
     candidateEducation: '',
@@ -76,6 +77,8 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     aiProvider: 'ollama',
     ollamaUrl: 'http://localhost:11434',
     modelName: 'llama3',
+    lmStudioUrl: 'http://localhost:1234',
+    lmStudioModel: '',
     claudeApiKey: '',
     claudeModel: 'claude-3-5-haiku-latest',
     geminiApiKey: '',
@@ -160,11 +163,6 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.senderEmail)
                 .onChange(async v => { this.plugin.settings.senderEmail = v; await this.plugin.saveSettings(); }));
 
-        new Setting(identitySection)
-            .setName('From Email')
-            .addText(t => t.setPlaceholder('sender@domain.com')
-                .setValue(this.plugin.settings.fromEmail)
-                .onChange(async v => { this.plugin.settings.fromEmail = v; await this.plugin.saveSettings(); }));
 
         new Setting(identitySection)
             .setName('Professional Fields')
@@ -247,6 +245,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             .setDesc('Choose which AI service generates the cover letter body.')
             .addDropdown(dd => {
                 dd.addOption('ollama', 'Ollama (local)');
+                dd.addOption('lmstudio', 'LM Studio (local)');
                 dd.addOption('claude', 'Anthropic Claude (API)');
                 dd.addOption('gemini', 'Google Gemini (API)');
                 dd.addOption('openai', 'OpenAI GPT (API)');
@@ -320,6 +319,35 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                             await this.plugin.saveSettings();
                         }));
             }
+        }
+
+        if (this.plugin.settings.aiProvider === 'lmstudio') {
+            const lmModels = await this.plugin.fetchLmStudioModels();
+
+            new Setting(aiSection)
+                .setName('LM Studio URL')
+                .setDesc('Base URL of your LM Studio local server.')
+                .addText(t => t.setPlaceholder('http://localhost:1234')
+                    .setValue(this.plugin.settings.lmStudioUrl)
+                    .onChange(async v => { this.plugin.settings.lmStudioUrl = v; await this.plugin.saveSettings(); }))
+                .addButton(btn => btn.setButtonText('Refresh Models').onClick(() => this.display()));
+
+            new Setting(aiSection)
+                .setName('Model')
+                .setDesc('Select from your loaded LM Studio models.')
+                .addDropdown(dd => {
+                    if (lmModels.length > 0) {
+                        lmModels.forEach(m => dd.addOption(m, m));
+                    } else {
+                        dd.addOption('', '— No models loaded — start LM Studio server first —');
+                    }
+                    const current = this.plugin.settings.lmStudioModel;
+                    if (current && lmModels.includes(current)) dd.setValue(current);
+                    dd.onChange(async v => {
+                        this.plugin.settings.lmStudioModel = v;
+                        await this.plugin.saveSettings();
+                    });
+                });
         }
 
         if (this.plugin.settings.aiProvider === 'claude') {
