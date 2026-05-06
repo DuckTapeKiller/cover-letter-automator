@@ -458,13 +458,20 @@ export default class CoverLetterPlugin extends Plugin {
                             if (sigFile instanceof TFile) {
                                 const sigData = await this.app.vault.readBinary(sigFile);
                                 const sigHeight = this.settings.signatureHeight || 85;
+                                const sigExt = sigFile.extension.toLowerCase();
+                                const sigType = (sigExt === 'jpg' || sigExt === 'jpeg') ? 'jpg'
+                                              : sigExt === 'gif'  ? 'gif'
+                                              : sigExt === 'bmp'  ? 'bmp'
+                                              : 'png';
+
                                 return [new Paragraph({
                                     children: [new ImageRun({
-                                        data: sigData,
+                                        data: new Uint8Array(sigData),
                                         transformation: {
-                                            width:  sigHeight * 2, // approximation for aspect ratio
+                                            width:  sigHeight * 2,
                                             height: sigHeight,
-                                        }
+                                        },
+                                        type: sigType
                                     })],
                                     spacing: { before: 0, after: 0 }
                                 })];
@@ -720,10 +727,10 @@ export default class CoverLetterPlugin extends Plugin {
         // 2. Normalize punctuation spacing
         t = t.replace(/(\w)([.,;:!?])([A-Z])/g, '$1$2 $3');
 
-        // 4. Remove obvious AI preamble
+        // 3. Remove obvious AI preamble
         t = t.replace(/^(Here is a cover letter|Certainly|Sure|I've generated|Below is the cover letter):?\n*/i, '');
 
-        // 5. Fix double spaces (but preserve newlines)
+        // 4. Fix double spaces (but preserve newlines)
         t = t.replace(/[ \t]{2,}/g, ' ');
 
         return t.trim();
@@ -1191,23 +1198,26 @@ class ImportUrlModal extends Modal {
                 const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
                 if (!jsonMatch) throw new Error('AI returned no valid JSON for this page. Try again.');
                 const data = JSON.parse(jsonMatch[0]);
-                
+
+                const company = (data.company && data.company !== 'null') ? data.company : 'Unknown Company';
+                const title   = (data.title   && data.title   !== 'null') ? data.title   : 'Unknown Role';
+
                 const folder = this.plugin.settings.jobsFolder.trim() || 'Jobs';
                 if (!(await this.app.vault.adapter.exists(folder))) await this.app.vault.createFolder(folder);
 
-                const fileName = `${data.company} - ${data.title}`.replace(/[\\/:*?"<>|]/g, '');
+                const fileName = `${company} - ${title}`.replace(/[\\/:*?"<>|]/g, '');
                 const path = `${folder}/${fileName}.md`;
                 
                 const content = `---
-Company: "${data.company}"
-Job Title: "${data.title}"
+Company: "${company}"
+Job Title: "${title}"
 Date: ${new Date().toISOString().split('T')[0]}
 Status: "Applied"
 ---
 
 # Job Description
 
-${data.description}
+${data.description || ''}
 `;
                 const file = await this.app.vault.create(path, content);
                 new Notice(`Job imported: ${path}`);
