@@ -111,7 +111,8 @@ export default class CoverLetterPlugin extends Plugin {
         format: 'DOCX' | 'PDF',
         modelOverride?: string,
         providerOverride?: string,
-        contentOverride?: string
+        contentOverride?: string,
+        tone?: string
     ): Promise<GeneratedFile> {
         onProgress(5);
         const fm = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
@@ -148,10 +149,11 @@ export default class CoverLetterPlugin extends Plugin {
             await new Promise(res => setTimeout(res, 1500));
             
             onProgress(40);
-            const mainPrompt = PromptBuilder.buildCoverLetterPrompt(jobPost, this.settings, strategy, gaps);
+            const mainPrompt = PromptBuilder.buildCoverLetterPrompt(jobPost, this.settings, strategy, gaps, tone);
             aiText = await this.generateWithAI(mainPrompt, modelOverride, providerOverride, true);
         }
 
+        aiText = this.cleanBody(aiText);
         aiText = aiText
             .replace(/```(?:markdown|docx|text|plain)?\n?/gi, '')
             .replace(/```/g, '')
@@ -553,10 +555,11 @@ export default class CoverLetterPlugin extends Plugin {
     // ─── Email ───────────────────────────────────────────────────────────────
 
     /** Generates a 2-3 sentence email body via the active AI provider. */
-    async generateEmailBody(frontmatter: Record<string, unknown>): Promise<string> {
-        const prompt = PromptBuilder.buildEmailPrompt(frontmatter, this.settings);
+    async generateEmailBody(frontmatter: Record<string, unknown>, tone?: string): Promise<string> {
+        const prompt = PromptBuilder.buildEmailPrompt(frontmatter, this.settings, tone);
         try {
-            return await this.generateWithAI(prompt, undefined, undefined, true);
+            const raw = await this.generateWithAI(prompt, undefined, undefined, true);
+            return this.cleanBody(raw);
         } catch {
             const title   = (frontmatter['Job Title'] as string) || 'the position';
             const company = (frontmatter.Company      as string) || 'your organisation';
@@ -674,7 +677,33 @@ export default class CoverLetterPlugin extends Plugin {
     }
 
     async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
-    async saveSettings() { await this.saveData(this.settings); }
+    async saveSettings() {
+        await this.saveData(this.settings);
+    }
+
+    /** Polishes AI output by fixing common hallucinations and formatting errors. */
+    cleanBody(text: string): string {
+        if (!text) return "";
+        let t = text.trim();
+
+        // 1. Fix "I [adjective/past-participle]" common hallucinations
+        t = t.replace(/\bI (passionate|interested|excited|thrilled|keen|committed|dedicated)\b/gi, 'I am $1');
+        t = t.replace(/\bI ([a-z]+ed)\b/gi, 'I am $1'); // e.g. "I focused on" -> "I am focused on"
+        
+        // 2. Fix CamelCase missing spaces (e.g. "PHPLaravel" or "SeniorDeveloper")
+        t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+        // 3. Normalize punctuation spacing
+        t = t.replace(/(\w)([.,;:!?])([A-Z])/g, '$1$2 $3');
+
+        // 4. Remove obvious AI preamble
+        t = t.replace(/^(Here is a cover letter|Certainly|Sure|I've generated|Below is the cover letter):?\n*/i, '');
+
+        // 5. Fix double spaces
+        t = t.replace(/\s{2,}/g, ' ');
+
+        return t;
+    }
 }
 
 // ─── Prompt Builder ──────────────────────────────────────────────────────────
@@ -684,7 +713,7 @@ class PromptBuilder {
         return LANGUAGE_INSTRUCTIONS[lang] || LANGUAGE_INSTRUCTIONS['en-GB'];
     }
 
-    static buildCoverLetterPrompt(jobContent: string, settings: CoverLetterSettings, strategy?: string, gaps?: string[]): string {
+    static buildCoverLetterPrompt(jobContent: string, settings: CoverLetterSettings, strategy?: string, gaps?: string[], tone?: string): string {
         const langStr = this.getLanguageStr(settings.language);
         const profile = `
 CANDIDATE DATA (READ ENTIRELY - DO NOT SKIM):
@@ -700,35 +729,48 @@ STRATEGIC DIRECTION:
 ` : '';
 
         const bannedWords = settings.customBannedWords.map(w => `- "${w}"`).join('\n');
+        const activeTone = tone || settings.defaultTone || 'Standard';
 
-        let prompt = settings.customPrompt || `You are a Senior Professional Cover Letter Writer. 
+        const TONE_INSTRUCTIONS: Record<string, string> = {
+            'Standard': 'Senior Executive, Formal, Direct.',
+            'Formal': 'Extremely Formal, Executive, High-Authority. Write at the level of a Harvard Business Review article.',
+            'Brief': 'Concise, Direct, Minimalist. Say more with fewer words. Exactly 3 short paragraphs.',
+            'Aggressive': 'Confident, High-Energy, Results-Driven. Focus heavily on ROI, metrics, and achievements.',
+            'Conversational': 'Professional but approachable and peer-level. Avoid sounding like a subordinate.'
+        };
+
+        const instruction = TONE_INSTRUCTIONS[activeTone] || TONE_INSTRUCTIONS['Standard'];
+
+        let prompt = settings.customPrompt || `You are an expert professional business writer with 20+ years of experience.
 
 {profile}
 
 {strategy}
 
-TASK: Write a 4-5 paragraph cover letter based on the JOB INFO below.
+TASK: Write a cover letter based on the JOB INFO below.
 
 JOB INFO:
 {jobContent}
 
-CRITICAL CONSTRAINTS (MANDATORY):
+EXAMPLE OF PERFECT STRUCTURE (MANDATORY):
+Paragraph 1: State interest in the role. Mention years of experience and why you are the perfect strategic fit.
+Paragraph 2: Deep dive into 2-3 specific technical skills or achievements that match the job description.
+Paragraph 3: Connect your professional values or specific achievements to the company's mission/needs.
+Paragraph 4: Professional sign-off.
+
+CRITICAL CONSTRAINTS:
 1. START IMMEDIATELY with the first paragraph.
-2. NO HEADER: Do not include addresses, date, or "Dear..." salutations.
-3. NO SALUTATION: Do not write "Dear [Name]". The template handles this.
-4. NO SIGNATURE: Do not include "Regards" or your name.
-5. NO PLACEHOLDERS: No [Name], [Company], etc.
-6. PLAIN TEXT ONLY: No Markdown, No **bolding**, No [[Wikilinks]], No # Headers.
-7. TONE: Senior Executive, Formal, Direct.
-8. LANGUAGE: {language}
-9. DEPTH & DETAIL: Use exactly 4-5 paragraphs. A short or brief response is a failure. Expand on the strategic match between the candidate and the job requirements using full, professional sentences.
-10. RELEVANCY AUDIT: ONLY include skills and experience directly relevant to the job. If the job is administrative/service-oriented, IGNORE academic achievements or over-qualified credentials. Focus on transferable soft skills and execution.
-11. MIRROR THE LEVEL: Adapt your professional persona to the seniority of the role. Do not sound boastful or over-qualified.
+2. NO HEADER / SALUTATION / SIGNATURE / PLACEHOLDERS.
+3. PLAIN TEXT ONLY: No Markdown, No **bolding**, No [[Wikilinks]].
+4. TONE: ${instruction}
+5. LANGUAGE: {language}
+6. RELEVANCY AUDIT: ONLY include skills and experience directly relevant to the job. IGNORE irrelevant academic achievements for service/admin roles.
+7. MIRROR THE LEVEL: Adapt your professional persona to the seniority of the role.
 
 BANNED WORDS (DO NOT USE):
 {bannedWords}
 
-IF YOU USE THE BANNED WORDS, ANY MARKDOWN, ANY AMERICAN SPELLINGS, OR IRRELEVANT ACADEMIC BRAGGING, THE TASK IS A FAILURE.`;
+IF YOU USE BANNED WORDS, ANY MARKDOWN, OR IRRELEVANT ACADEMIC BRAGGING, THE TASK IS A FAILURE.`;
 
         return prompt
             .replaceAll('{profile}', profile)
@@ -738,11 +780,22 @@ IF YOU USE THE BANNED WORDS, ANY MARKDOWN, ANY AMERICAN SPELLINGS, OR IRRELEVANT
             .replaceAll('{bannedWords}', bannedWords);
     }
 
-    static buildEmailPrompt(frontmatter: Record<string, any>, settings: CoverLetterSettings): string {
+    static buildEmailPrompt(frontmatter: Record<string, any>, settings: CoverLetterSettings, tone?: string): string {
         const title   = (frontmatter['Job Title'] as string) || 'the position';
         const company = (frontmatter.Company      as string) || 'your organisation';
         const contact = (frontmatter.Contact      as string) || '';
         const ref     = frontmatter.Ref ? ` (Ref: ${frontmatter.Ref as string})` : '';
+        const activeTone = tone || settings.defaultTone || 'Standard';
+
+        const TONE_DESC: Record<string, string> = {
+            'Standard': 'Senior Executive, Formal.',
+            'Formal': 'Extremely Formal, Executive.',
+            'Brief': 'Concise, Minimalist, Direct.',
+            'Aggressive': 'Confident, Results-Focused.',
+            'Conversational': 'Approachable, Professional, Peer-level.'
+        };
+
+        const desc = TONE_DESC[activeTone] || TONE_DESC['Standard'];
 
         return `Write a short, formal email body for a job application. Return ONLY the body text — no greeting, no sign-off, no subject line.
 
@@ -752,7 +805,7 @@ Sender: ${settings.senderName}
 
 Requirements:
 - 2 to 3 sentences only
-- TONE: Senior Executive, Formal.
+- TONE: ${desc}
 - STYLE: Avoid "enthusiastic" words like "excited", "passionate", or "thrilled". 
 - State interest in the role; mention CV and cover letter are attached
 - Do not begin with "I am writing to"`;
@@ -823,6 +876,13 @@ class GeneratorModal extends Modal {
         contentEl.createEl('p', { text: `Note: ${this.file.basename}`, cls: 'cla-subtitle' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
+
+        c.createEl('label', { text: 'Tone:', cls: 'cla-label' });
+        const toneSel = c.createEl('select', { cls: 'cla-select' });
+        ['Standard', 'Formal', 'Brief', 'Aggressive', 'Conversational'].forEach(t => {
+            const opt = toneSel.createEl('option', { text: t, value: t });
+            if (t === this.plugin.settings.defaultTone) opt.selected = true;
+        });
 
         c.createEl('label', { text: 'Professional Field:', cls: 'cla-label' });
         const fieldSel = c.createEl('select', { cls: 'cla-select' });
@@ -909,7 +969,6 @@ class GeneratorModal extends Modal {
         const setProgress = (pct: number) => {
             progBar.style.width = `${pct}%`;
         };
-        const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
         const btn    = c.createEl('button', { text: 'Generate Cover Letter', cls: 'cla-btn' });
 
         btn.addEventListener('click', async () => {
@@ -959,7 +1018,9 @@ class GeneratorModal extends Modal {
                     field,
                     fmt,
                     model,
-                    provider
+                    provider,
+                    undefined,
+                    toneSel.value
                 );
                 
                 clearInterval(progInterval);
@@ -970,8 +1031,8 @@ class GeneratorModal extends Modal {
                 const fm = this.plugin.app.metadataCache.getFileCache(this.file)?.frontmatter ?? {};
                 setTimeout(() => {
                     this.close();
-                    new EmailDraftModal(this.app, this.plugin, fm, result, cvPath, this.file).open();
-                }, 600);
+                    new EmailDraftModal(this.app, this.plugin, fm, result, cvPath, this.file, toneSel.value).open();
+                }, 1000);
             } catch (e: unknown) {
                 clearInterval(progInterval);
                 status.setText(`Error: ${(e as Error).message}`);
@@ -1153,7 +1214,8 @@ class EmailDraftModal extends Modal {
         private frontmatter: Record<string, unknown>,
         private coverLetterFile: GeneratedFile,
         private cvPath: string,
-        private sourceFile: TFile
+        private sourceFile: TFile,
+        private tone?: string
     ) { super(app); }
 
     async onOpen() {
@@ -1307,7 +1369,7 @@ class EmailDraftModal extends Modal {
         });
 
         // Generate body in background — enable button when ready
-        this.plugin.generateEmailBody(this.frontmatter).then(async text => {
+        this.plugin.generateEmailBody(this.frontmatter, this.tone).then(async text => {
             bodyEl.value    = text;
             bodyEl.disabled = false;
             openBtn.disabled = false;
@@ -1351,6 +1413,16 @@ FULL EXPERIENCE: ${s.candidateExperience}
 EDUCATION: ${s.candidateEducation}
 `;
 
+                const TONE_INSTRUCTIONS: Record<string, string> = {
+                    'Standard': 'Senior Executive, Formal, Direct.',
+                    'Formal': 'Extremely Formal, Executive, High-Authority. Write at the level of a Harvard Business Review article.',
+                    'Brief': 'Concise, Direct, Minimalist. Say more with fewer words. Exactly 3 short paragraphs.',
+                    'Aggressive': 'Confident, High-Energy, Results-Driven. Focus heavily on ROI, metrics, and achievements.',
+                    'Conversational': 'Professional but approachable and peer-level. Avoid sounding like a subordinate.'
+                };
+                const activeTone = this.tone || this.plugin.settings.defaultTone || 'Standard';
+                const instruction = TONE_INSTRUCTIONS[activeTone] || TONE_INSTRUCTIONS['Standard'];
+
                 const prompt = `INSTRUCTION: Refine the previous cover letter based on user feedback.
                 
                 USER FEEDBACK: ${feedback}
@@ -1364,7 +1436,7 @@ EDUCATION: ${s.candidateEducation}
                 TASK: Rewrite the cover letter body. 
                 - Address the user feedback specifically and aggressively.
                 - Review the FULL EXPERIENCE above to find any relevant details the user mentioned.
-                - Keep the Senior Executive tone.
+                - TONE: ${instruction}
                 - STRICTLY NO MARKDOWN, NO SALUTATION, NO SIGNATURE.
                 - Start immediately with the first paragraph.`;
 
@@ -1386,7 +1458,7 @@ EDUCATION: ${s.candidateEducation}
 
                 new Notice("Refinement complete!");
                 this.close();
-                new EmailDraftModal(this.app, this.plugin, this.frontmatter, result, this.cvPath, this.sourceFile).open();
+                new EmailDraftModal(this.app, this.plugin, this.frontmatter, result, this.cvPath, this.sourceFile, this.tone).open();
             } catch (e) {
                 refineBtn.disabled = false;
                 refineBtn.setText('Refinement failed — Retry?');

@@ -54,6 +54,7 @@ export interface CoverLetterSettings {
     // Signature
     signaturePath: string;
     signatureHeight: number;
+    defaultTone: string;
 }
 
 export const DEFAULT_SETTINGS: CoverLetterSettings = {
@@ -89,6 +90,7 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     language: 'en-GB',
     signaturePath: '',
     signatureHeight: 85,
+    defaultTone: 'Standard',
     customBannedWords: ['honed', 'hone', 'esteemed', 'esteemed company', 'passionate', 'thrilled', 'excited', 'keen interest', 'profoundly', 'invaluable', 'I am writing to express my interest', 'delve', 'tapestry', 'leverage'],
     customPrompt: `You are a Senior Professional Cover Letter Writer. 
 
@@ -255,6 +257,22 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     this.plugin.settings.aiProvider = v as AiProvider;
                     await this.plugin.saveSettings();
                     this.display(); // re-render to show/hide sub-settings
+                });
+            });
+
+        new Setting(aiSection)
+            .setName('Default Tone')
+            .setDesc('The default writing style for your letters.')
+            .addDropdown(dd => {
+                dd.addOption('Standard', 'Standard Professional');
+                dd.addOption('Formal', 'Formal / Executive');
+                dd.addOption('Brief', 'Brief / Concise');
+                dd.addOption('Aggressive', 'Aggressive / High Energy');
+                dd.addOption('Conversational', 'Conversational / Friendly');
+                dd.setValue(this.plugin.settings.defaultTone);
+                dd.onChange(async v => {
+                    this.plugin.settings.defaultTone = v;
+                    await this.plugin.saveSettings();
                 });
             });
 
