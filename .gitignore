@@ -4,3 +4,4 @@ dist/
 !esbuild.config.mjs
 .DS_Store
 .env
+data.json

@@ -1,4 +1,5 @@
 # Cover Letter Automator
+
 › Version 1.0.0
 ◈ Developed by DuckTapeKiller
 

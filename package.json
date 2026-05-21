@@ -1,27 +1,33 @@
 {
-  "name": "cover-letter-automator",
-  "version": "1.0.4",
-  "description": "Automatically generate cover letters as .docx files using Ollama.",
-  "main": "main.js",
-  "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "node esbuild.config.mjs production"
-  },
-  "keywords": [],
-  "author": "DuckTapeKiller",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "builtin-modules": "^3.3.0",
-    "esbuild": "0.19.11",
-    "obsidian": "latest",
-    "typescript": "5.3.3"
-  },
-  "dependencies": {
-    "docx": "^8.5.0",
-    "events": "^3.3.0",
-    "html2canvas": "^1.4.1",
-    "html2pdf.js": "^0.14.0",
-    "jspdf": "^4.2.1"
-  }
+    "name": "cover-letter-automator",
+    "version": "1.0.5",
+    "description": "Automatically generate cover letters as .docx files using Ollama.",
+    "main": "main.js",
+    "scripts": {
+        "dev": "node esbuild.config.mjs",
+        "build": "node esbuild.config.mjs production"
+    },
+    "keywords": [],
+    "author": "DuckTapeKiller",
+    "license": "MIT",
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^20.11.0",
+        "builtin-modules": "^3.3.0",
+        "esbuild": "0.19.11",
+        "eslint": "^10.4.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.5",
+        "obsidian": "latest",
+        "prettier": "^3.8.3",
+        "typescript": "5.3.3",
+        "typescript-eslint": "^8.59.4"
+    },
+    "dependencies": {
+        "docx": "^8.5.0",
+        "events": "^3.3.0",
+        "html2canvas": "^1.4.1",
+        "html2pdf.js": "^0.14.0",
+        "jspdf": "^4.2.1"
+    }
 }
