@@ -1774,12 +1774,12 @@ class JobDashboardModal extends Modal {
         this.modalEl.addClass('cla-job-dashboard');
         this.contentEl.empty();
 
-        const header = this.contentEl.createDiv({ cls: 'cla-job-header' });
-        const titleEl = header.createEl('h1', { cls: 'cla-title' });
-        setIcon(titleEl, 'briefcase');
-        titleEl.createSpan({ text: ' Job Dashboard' });
+        const headerEl = this.contentEl.createDiv({ cls: 'cla-modal-header' });
+        const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
+        setIcon(logoEl, 'briefcase');
+        headerEl.createEl('h1', { text: 'Job Dashboard', cls: 'cla-title' });
 
-        const subtitleEl = header.createEl('p', { cls: 'cla-subtitle' });
+        const subtitleEl = headerEl.createEl('p', { cls: 'cla-subtitle' });
         subtitleEl.setText('Loading…');
 
         const controls = this.contentEl.createDiv({ cls: 'cla-job-controls' });
@@ -1829,6 +1829,11 @@ class JobDashboardModal extends Modal {
             this.renderList();
         });
 
+        const refreshWrap = controls.createDiv({ cls: 'cla-job-control-btn-wrap' });
+        const refreshBtn = refreshWrap.createEl('button', { cls: 'cla-btn cla-btn-secondary cla-job-refresh' });
+        setIcon(refreshBtn, 'refresh-cw');
+        const refreshText = refreshBtn.createSpan({ text: ' Refresh' });
+
         const actions = this.contentEl.createDiv({ cls: 'cla-job-actions' });
         const addToggle = (label: string, initial: boolean, onChange: (v: boolean) => void) => {
             const wrap = actions.createDiv({ cls: 'cla-job-toggle' });
@@ -1853,8 +1858,6 @@ class JobDashboardModal extends Modal {
             this.showApplied = v;
             this.renderList();
         });
-
-        const refreshBtn = actions.createEl('button', { cls: 'cla-btn cla-job-refresh', text: 'Refresh' });
 
         // ─── Matching ───────────────────────────────────────────────────────
 
@@ -2227,7 +2230,7 @@ class JobDashboardModal extends Modal {
 
         const setRefreshing = (on: boolean) => {
             refreshBtn.disabled = on;
-            refreshBtn.setText(on ? 'Refreshing…' : 'Refresh');
+            refreshText.setText(on ? ' Refreshing…' : ' Refresh');
         };
 
         const getSelectedSources = (): JobSource[] => {
@@ -2679,10 +2682,15 @@ class GeneratorModal extends Modal {
     }
 
     async onOpen() {
+        this.modalEl.addClass('cla-modal');
+        this.modalEl.addClass('cla-generator-modal');
         const { contentEl } = this;
-        contentEl.addClass('cla-modal');
-        contentEl.createEl('h1', { text: 'Cover Letter Automator', cls: 'cla-title' });
-        contentEl.createEl('p', { text: `Note: ${this.file.basename}`, cls: 'cla-subtitle' });
+
+        const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
+        const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
+        setIcon(logoEl, 'wand-sparkles');
+        headerEl.createEl('h1', { text: 'Cover Letter Automator', cls: 'cla-title' });
+        headerEl.createEl('p', { text: `Note: ${this.file.basename}`, cls: 'cla-subtitle' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
 
@@ -2694,14 +2702,19 @@ class GeneratorModal extends Modal {
         });
 
         c.createEl('label', { text: 'Professional Field:', cls: 'cla-label' });
-        const fieldSel = c.createEl('select', { cls: 'cla-select' });
+        const fieldWrapper = c.createDiv({ cls: 'cla-field-wrapper' });
+        const fieldSel = fieldWrapper.createEl('select', { cls: 'cla-select' });
         this.plugin.settings.professionalFields.forEach((f) => {
             const opt = fieldSel.createEl('option', { text: f, value: f });
             if (f === this.plugin.settings.defaultField) opt.selected = true;
         });
         fieldSel.createEl('option', { text: '+ Add Custom…', value: 'CUSTOM' });
 
-        const customIn = c.createEl('input', { type: 'text', placeholder: 'Custom field name…', cls: 'cla-input' });
+        const customIn = fieldWrapper.createEl('input', {
+            type: 'text',
+            placeholder: 'Custom field name…',
+            cls: 'cla-input',
+        });
         customIn.style.display = 'none';
         fieldSel.addEventListener('change', () => {
             customIn.style.display = fieldSel.value === 'CUSTOM' ? 'block' : 'none';
@@ -2809,9 +2822,15 @@ class GeneratorModal extends Modal {
         const setProgress = (pct: number) => {
             progBar.style.width = `${pct}%`;
         };
-        const btnRow = c.createDiv({ cls: 'cla-btn-row' });
-        const btn = btnRow.createEl('button', { text: 'Generate Cover Letter', cls: 'cla-btn' });
-        const cancelBtn = btnRow.createEl('button', { text: 'Close', cls: 'cla-btn cla-btn-secondary' });
+        const secondaryActionsWrap = this.modalEl.createDiv({ cls: 'cla-secondary-actions-wrap' });
+        const btnRow = this.modalEl.createDiv({ cls: 'cla-btn-row' });
+        const btn = btnRow.createEl('button', { cls: 'cla-btn' });
+        setIcon(btn, 'wand-sparkles');
+        const btnText = btn.createSpan({ text: ' Generate Cover Letter' });
+
+        const cancelBtn = btnRow.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
+        setIcon(cancelBtn, 'x-circle');
+        const cancelText = cancelBtn.createSpan({ text: ' Close' });
 
         let working = false;
         let cancelled = false;
@@ -2840,7 +2859,7 @@ class GeneratorModal extends Modal {
             }
             cancelled = true;
             cancelBtn.disabled = true;
-            cancelBtn.setText('Cancelling…');
+            cancelText.setText(' Cancelling…');
             status.setText('Cancellation requested — finishing current step…');
         });
 
@@ -2868,9 +2887,9 @@ class GeneratorModal extends Modal {
             generated = null;
 
             btn.disabled = true;
-            btn.setText('Working…');
+            btnText.setText(' Working…');
             cancelBtn.disabled = false;
-            cancelBtn.setText('Cancel');
+            cancelText.setText(' Cancel');
             cancelBtn.classList.add('cla-btn-warning');
             status.setText('Analysing job note…');
             setProgress(10);
@@ -2918,8 +2937,8 @@ class GeneratorModal extends Modal {
                 clearInterval(progInterval);
                 setProgress(100);
                 status.setText('Done — file saved.');
-                btn.setText('Done!');
-                cancelBtn.setText('Close');
+                btnText.setText(' Done!');
+                cancelText.setText(' Close');
                 cancelBtn.classList.remove('cla-btn-warning');
 
                 const fm = this.plugin.app.metadataCache.getFileCache(this.file)?.frontmatter ?? {};
@@ -2931,9 +2950,9 @@ class GeneratorModal extends Modal {
                 clearInterval(progInterval);
                 status.setText(`Error: ${(e as Error).message}`);
                 btn.disabled = false;
-                btn.setText('Retry');
+                btnText.setText(' Retry');
                 cancelBtn.disabled = false;
-                cancelBtn.setText('Close');
+                cancelText.setText(' Close');
                 cancelBtn.classList.remove('cla-btn-warning');
             } finally {
                 working = false;
@@ -2957,9 +2976,10 @@ class GeneratorModal extends Modal {
                             const data = JSON.parse(match[0]);
                             if (data.email || data.contactName || data.reference || data.company) {
                                 const updateBtn = c.createEl('button', {
-                                    text: '◈ Found missing info — Update Note?',
                                     cls: 'cla-btn-mini',
                                 });
+                                setIcon(updateBtn, 'file-check');
+                                updateBtn.createSpan({ text: ' Found missing info — Update Note?' });
                                 updateBtn.onclick = async () => {
                                     await this.plugin.app.fileManager.processFrontMatter(this.file, (fm) => {
                                         if (data.email && !fm.Email) fm.Email = data.email;
@@ -2978,14 +2998,14 @@ class GeneratorModal extends Modal {
             }
 
             // Add Match Analysis UI
-            const anaBtn = c.createEl('button', {
-                text: '◈ Analyse Match Strategy',
+            const anaBtn = secondaryActionsWrap.createEl('button', {
                 cls: 'cla-btn cla-btn-secondary',
-                style: 'margin-bottom: 12px;',
             });
+            setIcon(anaBtn, 'target');
+            const anaText = anaBtn.createSpan({ text: ' Analyse Match Strategy' });
             anaBtn.onclick = async () => {
                 anaBtn.disabled = true;
-                anaBtn.setText('Analysing…');
+                anaText.setText(' Analysing…');
                 try {
                     const res = await this.plugin.generateWithAI(
                         PromptBuilder.buildAnalysisPrompt(jobContent, this.plugin.settings),
@@ -3017,16 +3037,18 @@ class GeneratorModal extends Modal {
                     anaBtn.remove();
                 } catch (e) {
                     anaBtn.disabled = false;
-                    anaBtn.setText('Analysis failed — Retry?');
+                    anaText.setText(' Analysis failed — Retry?');
                     new Notice(`Analysis Error: ${(e as Error).message}`);
                 }
             };
 
             // Add Interview Prep UI
-            const prepBtn = c.createEl('button', { text: '◈ Prepare for Interview', cls: 'cla-btn cla-btn-secondary' });
+            const prepBtn = secondaryActionsWrap.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
+            setIcon(prepBtn, 'award');
+            const prepText = prepBtn.createSpan({ text: ' Prepare for Interview' });
             prepBtn.onclick = async () => {
                 prepBtn.disabled = true;
-                prepBtn.setText('Generating Playbook…');
+                prepText.setText(' Generating Playbook…');
                 try {
                     const playbook = await this.plugin.generateWithAI(
                         PromptBuilder.buildInterviewPrepPrompt(jobContent, this.plugin.settings),
@@ -3049,10 +3071,10 @@ class GeneratorModal extends Modal {
                     const file = await this.plugin.app.vault.create(path, playbook);
                     new Notice(`Playbook created: ${path}`);
                     this.plugin.app.workspace.getLeaf().openFile(file);
-                    prepBtn.setText('Playbook Created ✓');
+                    prepText.setText(' Playbook Created ✓');
                 } catch (e) {
                     prepBtn.disabled = false;
-                    prepBtn.setText('Prep failed — Retry?');
+                    prepText.setText(' Prep failed — Retry?');
                     new Notice(`Interview Prep failed: ${(e as Error).message}`);
                 }
             };
@@ -3075,9 +3097,13 @@ class ImportUrlModal extends Modal {
     }
 
     onOpen() {
+        this.modalEl.addClass('cla-modal');
         const { contentEl } = this;
-        contentEl.addClass('cla-modal');
-        contentEl.createEl('h1', { text: 'Import Job from URL', cls: 'cla-title' });
+
+        const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
+        const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
+        setIcon(logoEl, 'wand-sparkles');
+        headerEl.createEl('h1', { text: 'Import Job from URL', cls: 'cla-title' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
         c.createEl('label', { text: 'Job Posting URL:', cls: 'cla-label' });
@@ -3088,14 +3114,23 @@ class ImportUrlModal extends Modal {
         });
 
         const status = c.createEl('p', { text: '', cls: 'cla-status-text' });
-        const btn = c.createEl('button', { text: 'Import Job', cls: 'cla-btn' });
+
+        const btnRow = this.modalEl.createDiv({ cls: 'cla-btn-row' });
+        const btn = btnRow.createEl('button', { cls: 'cla-btn' });
+        setIcon(btn, 'file-down');
+        const btnText = btn.createSpan({ text: ' Import Job' });
+
+        const closeBtn = btnRow.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
+        setIcon(closeBtn, 'x-circle');
+        closeBtn.createSpan({ text: ' Close' });
+        closeBtn.onclick = () => this.close();
 
         btn.onclick = async () => {
             const url = urlIn.value.trim();
             if (!url) return;
 
             btn.disabled = true;
-            btn.setText('Fetching…');
+            btnText.setText(' Fetching…');
             status.setText('Downloading page content…');
 
             try {
@@ -3156,7 +3191,7 @@ class ImportUrlModal extends Modal {
             } catch (e) {
                 status.setText(`Error: ${(e as Error).message}`);
                 btn.disabled = false;
-                btn.setText('Retry');
+                btnText.setText(' Retry');
             }
         };
     }
@@ -3182,11 +3217,13 @@ class EmailDraftModal extends Modal {
     }
 
     async onOpen() {
+        this.modalEl.addClass('cla-modal');
         const { contentEl } = this;
-        contentEl.addClass('cla-modal');
-        const titleEl = contentEl.createEl('h1', { cls: 'cla-title' });
-        setIcon(titleEl, 'mail');
-        titleEl.createSpan({ text: ' Send Application Email' });
+
+        const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
+        const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
+        setIcon(logoEl, 'wand-sparkles');
+        headerEl.createEl('h1', { text: 'Send Application Email', cls: 'cla-title' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
 
@@ -3270,11 +3307,16 @@ class EmailDraftModal extends Modal {
 
         const status = c.createEl('p', { cls: 'cla-status-text', text: '' });
 
-        const btnRow = c.createDiv({ cls: 'cla-btn-row' });
-        const closeBtn = btnRow.createEl('button', { text: 'Close', cls: 'cla-btn cla-btn-secondary' });
+        const btnRow = this.modalEl.createDiv({ cls: 'cla-btn-row' });
+
+        const closeBtn = btnRow.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
+        setIcon(closeBtn, 'x-circle');
+        closeBtn.createSpan({ text: ' Close' });
 
         if (Platform.isMobile) {
-            const copyBtn = btnRow.createEl('button', { text: 'Copy Body', cls: 'cla-btn cla-btn-secondary' });
+            const copyBtn = btnRow.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
+            setIcon(copyBtn, 'copy');
+            copyBtn.createSpan({ text: ' Copy Body' });
             copyBtn.onclick = async () => {
                 const contact = (this.frontmatter.Contact as string) || '';
                 const salutation = contact ? `Dear ${contact},` : 'Dear Sir/Madam,';
@@ -3285,8 +3327,11 @@ class EmailDraftModal extends Modal {
         }
 
         const openBtn = btnRow.createEl('button', {
-            text: Platform.isDesktop ? 'Open in Mail App' : 'Open Mail App',
             cls: 'cla-btn',
+        });
+        setIcon(openBtn, 'mail');
+        const openText = openBtn.createSpan({
+            text: Platform.isDesktop ? ' Open in Mail App' : ' Open Mail App',
         });
         openBtn.disabled = true; // enabled once body generation resolves
 
@@ -3301,7 +3346,7 @@ class EmailDraftModal extends Modal {
 
             openBtn.disabled = true;
             closeBtn.disabled = true;
-            openBtn.setText('Opening…');
+            openText.setText(' Opening…');
             status.setText('Building email draft…');
 
             try {
@@ -3333,14 +3378,14 @@ class EmailDraftModal extends Modal {
                 }
 
                 status.setText('Mail app opened with attachments loaded.');
-                openBtn.setText('Opened ✓');
+                openText.setText(' Opened ✓');
                 openBtn.disabled = false;
                 closeBtn.disabled = false;
             } catch (e: unknown) {
                 status.setText(`Error: ${(e as Error).message}`);
                 openBtn.disabled = false;
                 closeBtn.disabled = false;
-                openBtn.setText('Retry');
+                openText.setText(' Retry');
             }
         });
 
@@ -3376,10 +3421,11 @@ class EmailDraftModal extends Modal {
         refineInput.style.width = '100%';
 
         const refineBtn = refineWrap.createEl('button', {
-            text: 'Regenerate with Feedback',
             cls: 'cla-btn cla-btn-secondary',
             style: 'width: 100%; margin-top: 10px;',
         });
+        setIcon(refineBtn, 'refresh-cw');
+        const refineText = refineBtn.createSpan({ text: ' Regenerate with Feedback' });
 
         refineBtn.onclick = async () => {
             const feedback = refineInput.value.trim();
@@ -3389,7 +3435,7 @@ class EmailDraftModal extends Modal {
             }
 
             refineBtn.disabled = true;
-            refineBtn.setText('Refining…');
+            refineText.setText(' Refining…');
 
             try {
                 const raw = await this.plugin.app.vault.read(this.sourceFile);

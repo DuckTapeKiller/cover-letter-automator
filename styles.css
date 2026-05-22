@@ -38,10 +38,108 @@ body {
 /* ── Modal shell ────────────────────────────────────────── */
 
 .modal.cla-modal {
-    padding: var(--size-4-7, 28px) var(--size-4-8, 32px) var(--size-4-8, 32px);
+    padding: 0 !important;
     border-radius: var(--cla-radius-modal);
     max-width: var(--modal-max-width, 480px);
     width: min(480px, 92vw);
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    position: relative !important;
+    max-height: 85vh !important;
+}
+
+.modal.cla-modal .modal-content {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    margin: 0 !important;
+    padding: var(--size-4-7, 28px) var(--size-4-8, 32px) 0 var(--size-4-8, 32px) !important;
+}
+
+.modal.cla-modal .cla-btn-row {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 14px var(--size-4-8, 32px) var(--size-4-8, 32px) var(--size-4-8, 32px) !important;
+}
+
+/* Close button click/press physics */
+.cla-modal .modal-close-button {
+    cursor: pointer;
+    transition:
+        transform 0.1s ease,
+        box-shadow 0.1s ease !important;
+}
+
+.cla-modal .modal-close-button:active {
+    transform: translateY(1px) !important;
+    box-shadow: none !important;
+}
+
+/* ── Generator Modal specific overrides ────────────────── */
+
+.modal.cla-modal.cla-generator-modal {
+    max-width: 640px;
+    width: min(640px, 95vw);
+}
+
+.cla-generator-modal .cla-modal-container {
+    display: grid !important;
+    grid-template-columns: 160px 1fr !important;
+    gap: 12px 16px !important;
+    align-items: center !important;
+}
+
+.cla-generator-modal .cla-label {
+    margin: 0 !important;
+    grid-column: 1;
+}
+
+.cla-generator-modal .cla-select,
+.cla-generator-modal .cla-field-wrapper,
+.cla-generator-modal .cla-input {
+    margin: 0 !important;
+    grid-column: 2;
+    width: 100%;
+}
+
+.cla-generator-modal .cla-field-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cla-generator-modal .cla-progress-container,
+.cla-generator-modal .cla-status-text,
+.cla-generator-modal .cla-analysis-wrap,
+.cla-generator-modal .cla-btn-mini,
+.cla-generator-modal .cla-btn-secondary {
+    grid-column: 1 / span 2 !important;
+}
+
+.cla-modal-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.cla-modal-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(var(--interactive-accent-rgb), 0.1);
+    color: var(--interactive-accent);
+    margin-bottom: 12px;
+    --icon-size: 24px;
+}
+
+.cla-modal-logo svg {
+    width: var(--icon-size);
+    height: var(--icon-size);
 }
 
 .cla-title {
@@ -139,11 +237,14 @@ body {
 
 .cla-progress-container {
     width: 100%;
-    height: 5px;
-    background: var(--background-modifier-border);
-    border-radius: var(--cla-radius-s);
-    margin: 16px 0 6px;
+    height: 7px;
+    background: rgba(var(--interactive-accent-rgb), 0.04);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    margin: 18px 0 8px;
     overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .cla-progress-bar {
@@ -151,14 +252,34 @@ body {
     background: linear-gradient(
         90deg,
         var(--interactive-accent) 0%,
-        rgba(255, 255, 255, 0.4) 50%,
+        #a855f7 30%,
+        #6366f1 50%,
+        #a855f7 70%,
         var(--interactive-accent) 100%
     );
     background-size: 200% 100%;
-    border-radius: var(--cla-radius-s);
-    transition: width 0.25s ease;
+    border-radius: var(--cla-radius-l);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     width: 0%;
-    animation: cla-shimmer 1.5s infinite linear;
+    position: relative;
+    animation: cla-shimmer 2.5s infinite linear;
+    box-shadow: 0 0 8px rgba(var(--interactive-accent-rgb), 0.4);
+}
+
+.cla-progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.08) 100%
+    );
+    border-radius: var(--cla-radius-l);
 }
 
 /* ── Job Dashboard ───────────────────────────────────────── */
@@ -166,6 +287,19 @@ body {
 .modal.cla-modal.cla-job-dashboard {
     width: min(980px, 92vw);
     max-width: 92vw;
+}
+
+.modal.cla-modal.cla-job-dashboard .modal-content {
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: var(--size-4-7, 28px) var(--size-4-8, 32px) var(--size-4-8, 32px) var(--size-4-8, 32px) !important;
+}
+
+.modal.cla-modal.cla-job-dashboard .cla-job-list {
+    flex: 1 1 auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
 }
 
 .modal.cla-modal.cla-job-dashboard .cla-title {
@@ -176,76 +310,118 @@ body {
 
 .cla-job-controls {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: flex-end;
     flex-wrap: wrap;
-    margin-top: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
 }
 
 .cla-job-control {
-    min-width: 180px;
-    flex: 0 0 auto;
+    flex: 1 1 130px;
+    min-width: 100px;
 }
 
 .cla-job-grow {
-    flex: 1 1 320px;
-    min-width: 260px;
+    flex: 2 1 240px;
+    min-width: 180px;
+}
+
+.cla-job-control-btn-wrap {
+    flex: 0 0 auto;
+}
+
+.cla-job-refresh {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+/* Compact dashboard controls overrides */
+.cla-job-dashboard .cla-label {
+    margin: 6px 0 3px;
+    font-size: 10px;
+}
+
+.cla-job-dashboard .cla-select,
+.cla-job-dashboard .cla-input {
+    height: 32px;
+    font-size: 13px;
+    padding: 0 8px;
 }
 
 .cla-job-actions {
     display: flex;
-    gap: 12px;
+    gap: 16px;
     align-items: center;
-    margin: 16px 0 8px;
+    margin: 8px 0 8px;
     flex-wrap: wrap;
 }
 
 .cla-job-match-controls {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 6px;
+    padding: 4px 8px;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--cla-radius-m);
     background: var(--background-secondary);
 }
 
 .cla-job-match-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
     user-select: none;
 }
 
 .cla-job-match-provider {
-    min-width: 120px;
+    min-width: 100px;
 }
 
-.cla-job-match-model {
-    width: 240px;
+.cla-job-match-controls .cla-select {
+    height: 28px;
+    font-size: 12px;
+    padding: 0 6px;
+    min-width: 100px;
+}
+
+.cla-job-match-controls .cla-input {
+    height: 28px;
+    font-size: 12px;
+    padding: 0 6px;
+    width: 180px;
 }
 
 .cla-job-find-matches {
     flex: 0 0 auto;
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 0 10px;
+    height: 28px;
+    font-size: 12px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .cla-job-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: 6px;
+    font-size: 12px;
     color: var(--text-muted);
     user-select: none;
 }
 
 .cla-job-toggle input[type='checkbox'] {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     margin: 0;
 }
 
@@ -624,25 +800,21 @@ body {
     border-radius: var(--cla-btn-radius);
     cursor: pointer;
     font-size: 14px;
-    transition:
-        filter 0.15s ease,
-        transform 0.1s ease;
+    transition: filter 0.15s ease;
     flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 
 .cla-btn:hover:not(:disabled) {
     filter: brightness(1.08);
-    transform: translateY(-1px);
-}
-
-.cla-btn:active:not(:disabled) {
-    transform: translateY(0);
 }
 
 .cla-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    transform: none;
 }
 
 .cla-btn-secondary {
@@ -671,6 +843,16 @@ body {
     gap: 8px;
     margin-top: 14px;
     margin-bottom: 14px;
+}
+
+.cla-secondary-actions-wrap {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    padding: 0 var(--size-4-8, 32px) !important;
+    margin-top: 10px;
+    margin-bottom: 0;
+    flex: 0 0 auto !important;
 }
 
 .cla-btn-mini {
