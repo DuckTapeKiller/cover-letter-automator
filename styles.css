@@ -10,6 +10,24 @@ body {
     --cla-btn-radius: var(--button-radius, var(--radius-m));
     --cla-input-radius: var(--input-radius, var(--radius-m));
     --cla-icon-radius: var(--clickable-icon-radius, var(--radius-m));
+    --cla-modal-width: var(--modal-width, 30rem);
+    --cla-generator-modal-width: 40rem;
+    --cla-modal-max-height: var(--modal-max-height, 85vh);
+    --cla-modal-padding-x: var(--size-4-8, 2rem);
+    --cla-modal-padding-y: var(--size-4-7, 1.75rem);
+    --cla-modal-gap: var(--size-4-3, 0.75rem);
+    --cla-control-height: var(--input-height, 2.5rem);
+    --cla-dashboard-control-height: var(--input-height, 2rem);
+    --cla-dashboard-compact-control-height: 2rem;
+    --cla-btn-min-width: 10rem;
+    --cla-secondary-btn-min-width: 12rem;
+    --cla-match-button-min-width: 9.5rem;
+    --cla-icon-bg: transparent;
+    --cla-accent-soft: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+    --cla-accent-softer: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+    --cla-accent-muted: color-mix(in srgb, var(--interactive-accent) 72%, var(--background-primary));
+    --cla-accent-focus: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+    --cla-progress-shadow: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
 }
 
 /* ── Status bar ─────────────────────────────────────────── */
@@ -20,6 +38,14 @@ body {
     gap: 4px;
     font-weight: 600;
     cursor: default;
+}
+
+.cla-status-bar-clickable {
+    cursor: pointer;
+}
+
+.cla-status-bar-clickable:hover {
+    color: var(--interactive-accent);
 }
 
 @keyframes cla-pulse {
@@ -40,26 +66,26 @@ body {
 .modal.cla-modal {
     padding: 0 !important;
     border-radius: var(--cla-radius-modal);
-    max-width: var(--modal-max-width, 480px);
-    width: min(480px, 92vw);
+    max-width: var(--modal-max-width, var(--cla-modal-width));
+    width: min(var(--cla-modal-width), 92vw);
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
     position: relative !important;
-    max-height: 85vh !important;
+    max-height: var(--cla-modal-max-height) !important;
 }
 
 .modal.cla-modal .modal-content {
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     margin: 0 !important;
-    padding: var(--size-4-7, 28px) var(--size-4-8, 32px) 0 var(--size-4-8, 32px) !important;
+    padding: var(--cla-modal-padding-y) var(--cla-modal-padding-x) var(--cla-modal-gap) var(--cla-modal-padding-x) !important;
 }
 
 .modal.cla-modal .cla-btn-row {
     flex: 0 0 auto !important;
     margin: 0 !important;
-    padding: 14px var(--size-4-8, 32px) var(--size-4-8, 32px) var(--size-4-8, 32px) !important;
+    padding: var(--size-4-4, 1rem) var(--cla-modal-padding-x) var(--cla-modal-padding-x) var(--cla-modal-padding-x) !important;
 }
 
 /* Close button click/press physics */
@@ -78,14 +104,14 @@ body {
 /* ── Generator Modal specific overrides ────────────────── */
 
 .modal.cla-modal.cla-generator-modal {
-    max-width: 640px;
-    width: min(640px, 95vw);
+    max-width: var(--cla-generator-modal-width);
+    width: min(var(--cla-generator-modal-width), 95vw);
 }
 
 .cla-generator-modal .cla-modal-container {
     display: grid !important;
-    grid-template-columns: 160px 1fr !important;
-    gap: 12px 16px !important;
+    grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr) !important;
+    gap: var(--cla-modal-gap) var(--size-4-4, 1rem) !important;
     align-items: center !important;
 }
 
@@ -109,11 +135,32 @@ body {
 }
 
 .cla-generator-modal .cla-progress-container,
+.cla-generator-modal .cla-generation-timer,
 .cla-generator-modal .cla-status-text,
 .cla-generator-modal .cla-analysis-wrap,
 .cla-generator-modal .cla-btn-mini,
+.cla-generator-modal .cla-secondary-actions-wrap,
 .cla-generator-modal .cla-btn-secondary {
-    grid-column: 1 / span 2 !important;
+    grid-column: 1 / -1 !important;
+}
+
+@media (max-width: 600px) {
+    .cla-generator-modal .cla-modal-container {
+        grid-template-columns: 1fr !important;
+    }
+
+    .cla-generator-modal .cla-label,
+    .cla-generator-modal .cla-select,
+    .cla-generator-modal .cla-field-wrapper,
+    .cla-generator-modal .cla-input,
+    .cla-generator-modal .cla-progress-container,
+    .cla-generator-modal .cla-generation-timer,
+    .cla-generator-modal .cla-status-text,
+    .cla-generator-modal .cla-analysis-wrap,
+    .cla-generator-modal .cla-btn-mini,
+    .cla-generator-modal .cla-secondary-actions-wrap {
+        grid-column: 1 / -1 !important;
+    }
 }
 
 .cla-modal-header {
@@ -131,7 +178,7 @@ body {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: rgba(var(--interactive-accent-rgb), 0.1);
+    background: var(--cla-icon-bg);
     color: var(--interactive-accent);
     margin-bottom: 12px;
     --icon-size: 24px;
@@ -140,6 +187,9 @@ body {
 .cla-modal-logo svg {
     width: var(--icon-size);
     height: var(--icon-size);
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 .cla-title {
@@ -175,7 +225,7 @@ body {
 .cla-select,
 .cla-input {
     width: 100%;
-    height: 40px;
+    height: var(--cla-control-height);
     background: var(--background-modifier-form-field) !important;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--cla-input-radius);
@@ -190,7 +240,7 @@ body {
 .cla-input:focus {
     border-color: var(--interactive-accent);
     outline: none;
-    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.18);
+    box-shadow: 0 0 0 2px var(--cla-accent-focus);
 }
 
 .cla-select option {
@@ -233,15 +283,25 @@ body {
     font-style: italic;
 }
 
+/* ── Generation timer ───────────────────────────────────── */
+
+.cla-generation-timer {
+    margin: var(--size-4-3, 0.75rem) 0 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
 /* ── Progress bar ───────────────────────────────────────── */
 
 .cla-progress-container {
     width: 100%;
     height: 7px;
-    background: rgba(var(--interactive-accent-rgb), 0.04);
+    background: var(--cla-accent-softer);
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--cla-radius-l);
-    margin: 18px 0 8px;
+    margin: var(--size-4-1, 0.25rem) 0 var(--size-4-2, 0.5rem);
     overflow: hidden;
     position: relative;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -249,21 +309,12 @@ body {
 
 .cla-progress-bar {
     height: 100%;
-    background: linear-gradient(
-        90deg,
-        var(--interactive-accent) 0%,
-        #a855f7 30%,
-        #6366f1 50%,
-        #a855f7 70%,
-        var(--interactive-accent) 100%
-    );
-    background-size: 200% 100%;
+    background: var(--interactive-accent);
     border-radius: var(--cla-radius-l);
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     width: 0%;
     position: relative;
-    animation: cla-shimmer 2.5s infinite linear;
-    box-shadow: 0 0 8px rgba(var(--interactive-accent-rgb), 0.4);
+    box-shadow: 0 0 8px var(--cla-progress-shadow);
 }
 
 .cla-progress-bar::before {
@@ -360,16 +411,26 @@ body {
     align-items: center;
     margin: 8px 0 8px;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 2;
+    overflow: visible;
 }
 
 .cla-job-match-controls {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    flex: 1 1 34rem;
     gap: 6px;
     padding: 4px 8px;
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--cla-radius-m);
     background: var(--background-secondary);
+    max-width: 100%;
+    min-width: 0;
+    position: relative;
+    z-index: 3;
+    overflow: visible;
 }
 
 .cla-job-match-label {
@@ -382,32 +443,53 @@ body {
 }
 
 .cla-job-match-provider {
-    min-width: 100px;
+    min-width: 6rem;
 }
 
 .cla-job-match-controls .cla-select {
-    height: 28px;
+    height: var(--cla-dashboard-compact-control-height);
     font-size: 12px;
     padding: 0 6px;
-    min-width: 100px;
+    min-width: 6rem;
+    flex: 0 1 8rem;
+}
+
+.cla-job-match-controls .cla-job-match-model {
+    flex: 1 1 14rem;
+    min-width: 12rem;
+    max-width: 24rem;
 }
 
 .cla-job-match-controls .cla-input {
-    height: 28px;
+    height: var(--cla-dashboard-compact-control-height);
     font-size: 12px;
     padding: 0 6px;
-    width: 180px;
+    width: auto;
+    min-width: 10rem;
+    flex: 1 1 12rem;
 }
 
 .cla-job-find-matches {
-    flex: 0 0 auto;
-    padding: 0 10px;
-    height: 28px;
-    font-size: 12px;
+    flex: 0 0 var(--cla-match-button-min-width);
+    box-sizing: border-box;
+    min-width: var(--cla-match-button-min-width);
+    max-width: 100%;
+    padding: 0 14px;
+    height: var(--cla-dashboard-compact-control-height);
+    min-height: var(--cla-dashboard-compact-control-height);
+    font-size: 13px;
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    line-height: normal;
+    overflow: visible;
+}
+
+.cla-job-find-matches-text {
+    display: block;
+    white-space: nowrap;
+    overflow: visible;
 }
 
 .cla-job-toggle {
@@ -526,9 +608,9 @@ body {
 }
 
 .cla-job-new {
-    background: rgba(var(--interactive-accent-rgb), 0.18);
+    background: var(--cla-accent-focus);
     color: var(--interactive-accent);
-    border: 1px solid rgba(var(--interactive-accent-rgb), 0.35);
+    border: 1px solid var(--cla-progress-shadow);
 }
 
 .cla-job-dismissed {
@@ -550,9 +632,9 @@ body {
 }
 
 .cla-job-match {
-    background: rgba(var(--interactive-accent-rgb), 0.14);
+    background: var(--cla-accent-soft);
     color: var(--interactive-accent);
-    border: 1px solid rgba(var(--interactive-accent-rgb), 0.28);
+    border: 1px solid var(--cla-progress-shadow);
 }
 
 .cla-job-card-fields {
@@ -730,22 +812,13 @@ body {
 }
 
 .cla-job-icon-btn:hover {
-    border-color: rgba(var(--interactive-accent-rgb), 0.45);
+    border-color: var(--interactive-accent);
     background: var(--background-modifier-hover);
 }
 
 .cla-job-icon-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-}
-
-@keyframes cla-shimmer {
-    0% {
-        background-position: 200% 0;
-    }
-    100% {
-        background-position: -200% 0;
-    }
 }
 
 .cla-status-text {
@@ -802,10 +875,25 @@ body {
     font-size: 14px;
     transition: filter 0.15s ease;
     flex: 1;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+}
+
+.cla-btn svg,
+.cla-btn .svg-icon,
+.cla-modal-logo .svg-icon,
+.cla-job-icon-btn svg,
+.cla-job-icon-btn .svg-icon {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    flex: 0 0 auto;
 }
 
 .cla-btn:hover:not(:disabled) {
@@ -843,20 +931,34 @@ body {
     gap: 8px;
     margin-top: 14px;
     margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.cla-btn-row .cla-btn {
+    flex: 1 1 var(--cla-btn-min-width);
 }
 
 .cla-secondary-actions-wrap {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
-    padding: 0 var(--size-4-8, 32px) !important;
-    margin-top: 10px;
+    padding: 0 !important;
+    margin-top: var(--size-4-2, 0.5rem);
     margin-bottom: 0;
-    flex: 0 0 auto !important;
+    min-width: 0;
+}
+
+.cla-secondary-actions-wrap:empty {
+    display: none;
+}
+
+.cla-secondary-actions-wrap .cla-btn {
+    flex: 1 1 var(--cla-secondary-btn-min-width);
 }
 
 .cla-btn-mini {
-    background: rgba(var(--interactive-accent-rgb), 0.1);
+    background: var(--cla-accent-soft);
     color: var(--interactive-accent);
     border: 1px solid var(--interactive-accent);
     border-radius: var(--cla-radius-s);
@@ -869,7 +971,7 @@ body {
 }
 
 .cla-btn-mini:hover {
-    background: rgba(var(--interactive-accent-rgb), 0.2);
+    background: var(--cla-accent-focus);
 }
 
 /* ── Attachments list ───────────────────────────────────── */

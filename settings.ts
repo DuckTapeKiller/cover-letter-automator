@@ -56,6 +56,10 @@ export interface CoverLetterSettings {
     // Ollama
     ollamaUrl: string;
     modelName: string;
+    ollamaContextWindow: number;
+    ollamaFirstTokenTimeoutSeconds: number;
+    ollamaIdleTimeoutSeconds: number;
+    ollamaMaxRequestMinutes: number;
 
     // LM Studio
     lmStudioUrl: string;
@@ -85,6 +89,8 @@ export interface CoverLetterSettings {
     customBannedWords: string[];
     customPrompt: string;
     defaultTone: string;
+    enableStrategyAnalysis: boolean;
+    lastCoverLetterGenerationMs: number;
 
     // Email/CV
     cvPaths: { name: string; path: string }[];
@@ -127,6 +133,10 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     aiProvider: 'ollama',
     ollamaUrl: 'http://localhost:11434',
     modelName: 'llama3',
+    ollamaContextWindow: 8192,
+    ollamaFirstTokenTimeoutSeconds: 300,
+    ollamaIdleTimeoutSeconds: 180,
+    ollamaMaxRequestMinutes: 10,
 
     lmStudioUrl: 'http://localhost:1234',
     lmStudioModel: '',
@@ -150,6 +160,8 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     language: 'en-GB',
 
     defaultTone: 'Standard',
+    enableStrategyAnalysis: false,
+    lastCoverLetterGenerationMs: 0,
     customBannedWords: [
         'honed',
         'hone',
@@ -401,13 +413,25 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 });
             });
 
+        new Setting(aiSection)
+            .setName('Automatic strategy analysis')
+            .setDesc(
+                'Runs an extra AI call before every cover letter. Leave off for faster and more reliable local generation.'
+            )
+            .addToggle((t) =>
+                t.setValue(this.plugin.settings.enableStrategyAnalysis).onChange(async (v) => {
+                    this.plugin.settings.enableStrategyAnalysis = v;
+                    await this.plugin.saveSettings();
+                })
+            );
+
         const nested = aiSection.createDiv('cla-nested-settings');
 
-        const apiKeyComponent = (container: HTMLElement, value: string, onChange: (v: string) => Promise<void>) => {
+        const apiKeyComponent = (container: HTMLElement, provider: AiProvider) => {
             const secret = new SecretComponent(this.app, container);
-            secret.setValue(value);
+            secret.setValue(this.plugin.getApiKeyForProvider(provider));
             secret.onChange((v) => {
-                void onChange(v.trim());
+                void this.plugin.setApiKeyForProvider(provider, v.trim());
             });
             return secret;
         };
@@ -444,6 +468,74 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }
             );
+
+            new Setting(s)
+                .setName('Context window')
+                .setDesc(
+                    'Maximum Ollama context tokens for plugin requests. 8192 is safer for large local models on 24GB Macs; increase only if prompts are being truncated.'
+                )
+                .addText((t) =>
+                    t
+                        .setPlaceholder(String(DEFAULT_SETTINGS.ollamaContextWindow))
+                        .setValue(String(this.plugin.settings.ollamaContextWindow))
+                        .onChange(async (v) => {
+                            const n = Number(v);
+                            this.plugin.settings.ollamaContextWindow =
+                                Number.isFinite(n) && n >= 2048 ? Math.round(n) : DEFAULT_SETTINGS.ollamaContextWindow;
+                            await this.plugin.saveSettings();
+                        })
+                );
+
+            new Setting(s)
+                .setName('First output timeout')
+                .setDesc(
+                    'Seconds to wait for the first streamed token after Ollama accepts the request. Increase this for large models or first-run model loads.'
+                )
+                .addText((t) =>
+                    t
+                        .setPlaceholder(String(DEFAULT_SETTINGS.ollamaFirstTokenTimeoutSeconds))
+                        .setValue(String(this.plugin.settings.ollamaFirstTokenTimeoutSeconds))
+                        .onChange(async (v) => {
+                            const n = Number(v);
+                            this.plugin.settings.ollamaFirstTokenTimeoutSeconds =
+                                Number.isFinite(n) && n >= 30
+                                    ? Math.round(n)
+                                    : DEFAULT_SETTINGS.ollamaFirstTokenTimeoutSeconds;
+                            await this.plugin.saveSettings();
+                        })
+                );
+
+            new Setting(s)
+                .setName('Idle timeout')
+                .setDesc('Seconds to wait between streamed Ollama chunks before assuming the request is stalled.')
+                .addText((t) =>
+                    t
+                        .setPlaceholder(String(DEFAULT_SETTINGS.ollamaIdleTimeoutSeconds))
+                        .setValue(String(this.plugin.settings.ollamaIdleTimeoutSeconds))
+                        .onChange(async (v) => {
+                            const n = Number(v);
+                            this.plugin.settings.ollamaIdleTimeoutSeconds =
+                                Number.isFinite(n) && n >= 30
+                                    ? Math.round(n)
+                                    : DEFAULT_SETTINGS.ollamaIdleTimeoutSeconds;
+                            await this.plugin.saveSettings();
+                        })
+                );
+
+            new Setting(s)
+                .setName('Maximum request time')
+                .setDesc('Minutes before a single Ollama request is aborted even if it has not failed.')
+                .addText((t) =>
+                    t
+                        .setPlaceholder(String(DEFAULT_SETTINGS.ollamaMaxRequestMinutes))
+                        .setValue(String(this.plugin.settings.ollamaMaxRequestMinutes))
+                        .onChange(async (v) => {
+                            const n = Number(v);
+                            this.plugin.settings.ollamaMaxRequestMinutes =
+                                Number.isFinite(n) && n >= 1 ? Math.round(n) : DEFAULT_SETTINGS.ollamaMaxRequestMinutes;
+                            await this.plugin.saveSettings();
+                        })
+                );
         }
 
         {
@@ -485,12 +577,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('API Key')
                 .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
-                .addComponent((el) =>
-                    apiKeyComponent(el, this.plugin.settings.claudeSecretId, async (v) => {
-                        this.plugin.settings.claudeSecretId = v;
-                        await this.plugin.saveSettings();
-                    })
-                );
+                .addComponent((el) => apiKeyComponent(el, 'claude'));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick a suggestion.'),
@@ -512,12 +599,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('API Key')
                 .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
-                .addComponent((el) =>
-                    apiKeyComponent(el, this.plugin.settings.geminiSecretId, async (v) => {
-                        this.plugin.settings.geminiSecretId = v;
-                        await this.plugin.saveSettings();
-                    })
-                );
+                .addComponent((el) => apiKeyComponent(el, 'gemini'));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick a suggestion.'),
@@ -539,12 +621,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('API Key')
                 .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
-                .addComponent((el) =>
-                    apiKeyComponent(el, this.plugin.settings.openaiSecretId, async (v) => {
-                        this.plugin.settings.openaiSecretId = v;
-                        await this.plugin.saveSettings();
-                    })
-                );
+                .addComponent((el) => apiKeyComponent(el, 'openai'));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick a suggestion.'),
@@ -566,12 +643,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('API Key')
                 .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
-                .addComponent((el) =>
-                    apiKeyComponent(el, this.plugin.settings.groqSecretId, async (v) => {
-                        this.plugin.settings.groqSecretId = v;
-                        await this.plugin.saveSettings();
-                    })
-                );
+                .addComponent((el) => apiKeyComponent(el, 'groq'));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick a suggestion.'),
@@ -593,12 +665,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('API Key')
                 .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
-                .addComponent((el) =>
-                    apiKeyComponent(el, this.plugin.settings.openRouterSecretId, async (v) => {
-                        this.plugin.settings.openRouterSecretId = v;
-                        await this.plugin.saveSettings();
-                    })
-                );
+                .addComponent((el) => apiKeyComponent(el, 'openrouter'));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick a suggestion.'),
