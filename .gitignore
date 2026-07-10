@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.js
+!esbuild.config.mjs
+.DS_Store
+.env
+data.json

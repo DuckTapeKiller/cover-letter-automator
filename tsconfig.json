@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "inlineSourceMap": true,
+        "inlineSources": true,
+        "module": "CommonJS",
+        "target": "ES2022",
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "strict": true,
+        "lib": ["ES2022", "DOM"],
+        "skipLibCheck": true,
+        "moduleResolution": "node"
+    },
+    "include": ["*.ts"],
+    "exclude": ["node_modules"]
+}

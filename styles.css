@@ -1,0 +1,1062 @@
+/* Cover Letter Automator — styles */
+
+/* ── Theme-aligned variables (keep UI consistent across themes) ───────────── */
+
+body {
+    --cla-radius-modal: var(--modal-radius, var(--radius-l));
+    --cla-radius-l: var(--radius-l);
+    --cla-radius-m: var(--radius-m);
+    --cla-radius-s: var(--radius-s);
+    --cla-btn-radius: var(--button-radius, var(--radius-m));
+    --cla-input-radius: var(--input-radius, var(--radius-m));
+    --cla-icon-radius: var(--clickable-icon-radius, var(--radius-m));
+    --cla-modal-width: var(--modal-width, 30rem);
+    --cla-generator-modal-width: 40rem;
+    --cla-modal-max-height: var(--modal-max-height, 85vh);
+    --cla-modal-padding-x: var(--size-4-8, 2rem);
+    --cla-modal-padding-y: var(--size-4-7, 1.75rem);
+    --cla-modal-gap: var(--size-4-3, 0.75rem);
+    --cla-control-height: var(--input-height, 2.5rem);
+    --cla-dashboard-control-height: var(--input-height, 2rem);
+    --cla-dashboard-compact-control-height: 2rem;
+    --cla-btn-min-width: 10rem;
+    --cla-secondary-btn-min-width: 12rem;
+    --cla-match-button-min-width: 9.5rem;
+    --cla-icon-bg: transparent;
+    --cla-accent-soft: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+    --cla-accent-softer: color-mix(in srgb, var(--interactive-accent) 6%, transparent);
+    --cla-accent-muted: color-mix(in srgb, var(--interactive-accent) 72%, var(--background-primary));
+    --cla-accent-focus: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+    --cla-progress-shadow: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+}
+
+/* ── Status bar ─────────────────────────────────────────── */
+
+.cla-status-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    cursor: default;
+}
+
+.cla-status-bar-clickable {
+    cursor: pointer;
+}
+
+.cla-status-bar-clickable:hover {
+    color: var(--interactive-accent);
+}
+
+@keyframes cla-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.35;
+    }
+}
+.cla-pulse {
+    animation: cla-pulse 1.8s ease-in-out infinite;
+}
+
+/* ── Modal shell ────────────────────────────────────────── */
+
+.modal.cla-modal {
+    padding: 0 !important;
+    border-radius: var(--cla-radius-modal);
+    max-width: var(--modal-max-width, var(--cla-modal-width));
+    width: min(var(--cla-modal-width), 92vw);
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    position: relative !important;
+    max-height: var(--cla-modal-max-height) !important;
+}
+
+.modal.cla-modal .modal-content {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    margin: 0 !important;
+    padding: var(--cla-modal-padding-y) var(--cla-modal-padding-x) var(--cla-modal-gap) var(--cla-modal-padding-x) !important;
+}
+
+.modal.cla-modal .cla-btn-row {
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: var(--size-4-4, 1rem) var(--cla-modal-padding-x) var(--cla-modal-padding-x) var(--cla-modal-padding-x) !important;
+}
+
+/* Close button click/press physics */
+.cla-modal .modal-close-button {
+    cursor: pointer;
+    transition:
+        transform 0.1s ease,
+        box-shadow 0.1s ease !important;
+}
+
+.cla-modal .modal-close-button:active {
+    transform: translateY(1px) !important;
+    box-shadow: none !important;
+}
+
+/* ── Generator Modal specific overrides ────────────────── */
+
+.modal.cla-modal.cla-generator-modal {
+    max-width: var(--cla-generator-modal-width);
+    width: min(var(--cla-generator-modal-width), 95vw);
+}
+
+.cla-generator-modal .cla-modal-container {
+    display: grid !important;
+    grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr) !important;
+    gap: var(--cla-modal-gap) var(--size-4-4, 1rem) !important;
+    align-items: center !important;
+}
+
+.cla-generator-modal .cla-label {
+    margin: 0 !important;
+    grid-column: 1;
+}
+
+.cla-generator-modal .cla-select,
+.cla-generator-modal .cla-field-wrapper,
+.cla-generator-modal .cla-input {
+    margin: 0 !important;
+    grid-column: 2;
+    width: 100%;
+}
+
+.cla-generator-modal .cla-field-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cla-generator-modal .cla-progress-container,
+.cla-generator-modal .cla-generation-timer,
+.cla-generator-modal .cla-status-text,
+.cla-generator-modal .cla-analysis-wrap,
+.cla-generator-modal .cla-btn-mini,
+.cla-generator-modal .cla-secondary-actions-wrap,
+.cla-generator-modal .cla-btn-secondary {
+    grid-column: 1 / -1 !important;
+}
+
+@media (max-width: 600px) {
+    .cla-generator-modal .cla-modal-container {
+        grid-template-columns: 1fr !important;
+    }
+
+    .cla-generator-modal .cla-label,
+    .cla-generator-modal .cla-select,
+    .cla-generator-modal .cla-field-wrapper,
+    .cla-generator-modal .cla-input,
+    .cla-generator-modal .cla-progress-container,
+    .cla-generator-modal .cla-generation-timer,
+    .cla-generator-modal .cla-status-text,
+    .cla-generator-modal .cla-analysis-wrap,
+    .cla-generator-modal .cla-btn-mini,
+    .cla-generator-modal .cla-secondary-actions-wrap {
+        grid-column: 1 / -1 !important;
+    }
+}
+
+.cla-modal-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.cla-modal-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--cla-icon-bg);
+    color: var(--interactive-accent);
+    margin-bottom: 12px;
+    --icon-size: 24px;
+}
+
+.cla-modal-logo svg {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.cla-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+
+.cla-subtitle {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 18px;
+}
+
+.cla-modal-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* ── Form controls ──────────────────────────────────────── */
+
+.cla-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 14px 0 5px;
+}
+
+.cla-select,
+.cla-input {
+    width: 100%;
+    height: var(--cla-control-height);
+    background: var(--background-modifier-form-field) !important;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-input-radius);
+    color: var(--text-normal) !important;
+    padding: 0 10px;
+    font-family: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.cla-select:focus,
+.cla-input:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--cla-accent-focus);
+}
+
+.cla-select option {
+    background: var(--background-primary);
+    color: var(--text-normal);
+}
+
+.cla-textarea {
+    width: 100%;
+    min-height: 110px;
+    resize: vertical;
+    background: var(--background-modifier-form-field) !important;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-input-radius);
+    color: var(--text-normal) !important;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.cla-textarea:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+}
+
+.cla-textarea:disabled,
+.cla-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Provider badge ─────────────────────────────────────── */
+
+.cla-provider-badge {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 6px 0 2px;
+    font-style: italic;
+}
+
+/* ── Generation timer ───────────────────────────────────── */
+
+.cla-generation-timer {
+    margin: var(--size-4-3, 0.75rem) 0 0;
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* ── Progress bar ───────────────────────────────────────── */
+
+.cla-progress-container {
+    width: 100%;
+    height: 7px;
+    background: var(--cla-accent-softer);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    margin: var(--size-4-1, 0.25rem) 0 var(--size-4-2, 0.5rem);
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cla-progress-bar {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--cla-radius-l);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+    position: relative;
+    box-shadow: 0 0 8px var(--cla-progress-shadow);
+}
+
+.cla-progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.08) 100%
+    );
+    border-radius: var(--cla-radius-l);
+}
+
+/* ── Job Dashboard ───────────────────────────────────────── */
+
+.modal.cla-modal.cla-job-dashboard {
+    width: min(980px, 92vw);
+    max-width: 92vw;
+}
+
+.modal.cla-modal.cla-job-dashboard .modal-content {
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: var(--size-4-7, 28px) var(--size-4-8, 32px) var(--size-4-8, 32px) var(--size-4-8, 32px) !important;
+}
+
+.modal.cla-modal.cla-job-dashboard .cla-job-list {
+    flex: 1 1 auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+}
+
+.modal.cla-modal.cla-job-dashboard .cla-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cla-job-controls {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.cla-job-control {
+    flex: 1 1 130px;
+    min-width: 100px;
+}
+
+.cla-job-grow {
+    flex: 2 1 240px;
+    min-width: 180px;
+}
+
+.cla-job-control-btn-wrap {
+    flex: 0 0 auto;
+}
+
+.cla-job-refresh {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+/* Compact dashboard controls overrides */
+.cla-job-dashboard .cla-label {
+    margin: 6px 0 3px;
+    font-size: 10px;
+}
+
+.cla-job-dashboard .cla-select,
+.cla-job-dashboard .cla-input {
+    height: 32px;
+    font-size: 13px;
+    padding: 0 8px;
+}
+
+.cla-job-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin: 8px 0 8px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+}
+
+.cla-job-match-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1 1 34rem;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-m);
+    background: var(--background-secondary);
+    max-width: 100%;
+    min-width: 0;
+    position: relative;
+    z-index: 3;
+    overflow: visible;
+}
+
+.cla-job-match-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.cla-job-match-provider {
+    min-width: 6rem;
+}
+
+.cla-job-match-controls .cla-select {
+    height: var(--cla-dashboard-compact-control-height);
+    font-size: 12px;
+    padding: 0 6px;
+    min-width: 6rem;
+    flex: 0 1 8rem;
+}
+
+.cla-job-match-controls .cla-job-match-model {
+    flex: 1 1 14rem;
+    min-width: 12rem;
+    max-width: 24rem;
+}
+
+.cla-job-match-controls .cla-input {
+    height: var(--cla-dashboard-compact-control-height);
+    font-size: 12px;
+    padding: 0 6px;
+    width: auto;
+    min-width: 10rem;
+    flex: 1 1 12rem;
+}
+
+.cla-job-find-matches {
+    flex: 0 0 var(--cla-match-button-min-width);
+    box-sizing: border-box;
+    min-width: var(--cla-match-button-min-width);
+    max-width: 100%;
+    padding: 0 14px;
+    height: var(--cla-dashboard-compact-control-height);
+    min-height: var(--cla-dashboard-compact-control-height);
+    font-size: 13px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: normal;
+    overflow: visible;
+}
+
+.cla-job-find-matches-text {
+    display: block;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.cla-job-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.cla-job-toggle input[type='checkbox'] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+.cla-job-list {
+    margin-top: 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    overflow: auto;
+    max-height: 62vh;
+    background: var(--background-primary);
+
+    /* Card grid */
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-content: start;
+}
+
+@media (max-width: 900px) {
+    .cla-job-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+.cla-job-list.cla-job-list-mode-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cla-job-empty {
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.cla-job-card {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    background: var(--background-secondary);
+    padding: 12px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.cla-job-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.cla-job-card-title-wrap {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.cla-job-card-title {
+    display: block;
+    color: var(--text-normal);
+    font-weight: 750;
+    text-decoration: none;
+    font-size: 15px;
+    line-height: 1.25;
+    margin-bottom: 4px;
+}
+
+.cla-job-card-title:hover {
+    text-decoration: underline;
+}
+
+.cla-job-card-sub {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.25;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cla-job-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+}
+
+.cla-job-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.cla-job-new {
+    background: var(--cla-accent-focus);
+    color: var(--interactive-accent);
+    border: 1px solid var(--cla-progress-shadow);
+}
+
+.cla-job-dismissed {
+    background: rgba(255, 0, 0, 0.08);
+    color: var(--text-error);
+    border: 1px solid rgba(255, 0, 0, 0.18);
+}
+
+.cla-job-applied {
+    background: rgba(0, 180, 120, 0.14);
+    color: var(--text-normal);
+    border: 1px solid rgba(0, 180, 120, 0.28);
+}
+
+.cla-job-pinned {
+    background: rgba(255, 200, 0, 0.16);
+    color: var(--text-normal);
+    border: 1px solid rgba(255, 200, 0, 0.28);
+}
+
+.cla-job-match {
+    background: var(--cla-accent-soft);
+    color: var(--interactive-accent);
+    border: 1px solid var(--cla-progress-shadow);
+}
+
+.cla-job-card-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+}
+
+.cla-job-field {
+    min-width: 0;
+}
+
+.cla-job-field-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.cla-job-field-value {
+    font-size: var(--font-ui-small);
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cla-job-card-desc {
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 10px;
+}
+
+.cla-job-card-desc .cla-job-field-label {
+    margin-bottom: 6px;
+}
+
+.cla-job-description {
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 6;
+}
+
+.cla-job-description.cla-job-description-empty {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.cla-job-card-actions {
+    display: flex;
+    gap: 8px;
+    row-gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.cla-job-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.cla-job-card-match {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.cla-job-card-match-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.cla-job-card-match-score {
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--interactive-accent);
+}
+
+.cla-job-card-match-empty .cla-job-card-match-score {
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.cla-job-row {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    background: var(--background-secondary);
+    padding: 12px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    min-width: 0;
+}
+
+.cla-job-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cla-job-row-title {
+    color: var(--text-normal);
+    font-weight: 750;
+    text-decoration: none;
+    font-size: 15px;
+    line-height: 1.25;
+}
+
+.cla-job-row-title:hover {
+    text-decoration: underline;
+}
+
+.cla-job-row-meta {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.cla-job-row-desc {
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+}
+
+.cla-job-row-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.cla-job-icon-btn {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: var(--cla-icon-radius);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-modifier-form-field);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-normal);
+    --icon-size: 24px;
+}
+
+.cla-job-icon-btn svg {
+    /* Obsidian setIcon() respects --icon-size on the parent */
+    width: var(--icon-size);
+    height: var(--icon-size);
+}
+
+.cla-job-icon-btn:hover {
+    border-color: var(--interactive-accent);
+    background: var(--background-modifier-hover);
+}
+
+.cla-job-icon-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cla-status-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 2px 0 12px;
+    min-height: 18px;
+}
+
+/* ── Analysis Dashboard ─────────────────────────────────── */
+
+.cla-analysis-wrap {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-left: 4px solid var(--interactive-accent);
+    border-radius: var(--cla-radius-l);
+    padding: 16px;
+    margin: 14px 0;
+}
+
+.cla-score {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--interactive-accent);
+    margin: 0 0 10px;
+    text-align: center;
+}
+
+.cla-strategy {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0 0 8px;
+    color: var(--text-normal);
+}
+
+.cla-gaps {
+    font-size: 12px;
+    color: var(--text-error);
+    margin: 0;
+    font-style: italic;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+
+.cla-btn {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 600;
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--cla-btn-radius);
+    cursor: pointer;
+    font-size: 14px;
+    transition: filter 0.15s ease;
+    flex: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+}
+
+.cla-btn svg,
+.cla-btn .svg-icon,
+.cla-modal-logo .svg-icon,
+.cla-job-icon-btn svg,
+.cla-job-icon-btn .svg-icon {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    flex: 0 0 auto;
+}
+
+.cla-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+}
+
+.cla-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cla-btn-secondary {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.cla-btn-secondary:hover:not(:disabled) {
+    background: var(--background-modifier-hover);
+    filter: none;
+}
+
+.cla-btn-warning {
+    background: var(--background-modifier-error);
+    color: var(--text-error);
+    border: 1px solid var(--background-modifier-error-hover);
+}
+
+.cla-btn-warning:hover:not(:disabled) {
+    background: var(--background-modifier-error-hover);
+    filter: none;
+}
+
+.cla-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.cla-btn-row .cla-btn {
+    flex: 1 1 var(--cla-btn-min-width);
+}
+
+.cla-secondary-actions-wrap {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 !important;
+    margin-top: var(--size-4-2, 0.5rem);
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+.cla-secondary-actions-wrap:empty {
+    display: none;
+}
+
+.cla-secondary-actions-wrap .cla-btn {
+    flex: 1 1 var(--cla-secondary-btn-min-width);
+}
+
+.cla-btn-mini {
+    background: var(--cla-accent-soft);
+    color: var(--interactive-accent);
+    border: 1px solid var(--interactive-accent);
+    border-radius: var(--cla-radius-s);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background 0.2s ease;
+}
+
+.cla-btn-mini:hover {
+    background: var(--cla-accent-focus);
+}
+
+/* ── Attachments list ───────────────────────────────────── */
+
+.cla-attach-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.cla-attach-item {
+    font-size: 12px;
+    padding: 5px 8px;
+    background: var(--background-secondary);
+    border-radius: var(--cla-radius-m);
+    color: var(--text-normal);
+}
+
+.cla-attach-warn {
+    background: rgba(var(--color-yellow-rgb, 255, 200, 0), 0.12);
+    color: var(--text-warning, var(--text-muted));
+}
+
+/* ── Code block button ──────────────────────────────────── */
+
+.cla-button-container {
+    padding: 8px 0;
+}
+
+.cla-generate-btn {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-weight: 700;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--cla-btn-radius);
+    cursor: pointer;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    transition: filter 0.15s ease;
+}
+
+.cla-generate-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* ── Settings sections ──────────────────────────────────── */
+
+.cla-settings-section {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--cla-radius-l);
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+.cla-settings-section > summary {
+    padding: 10px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.cla-settings-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+.cla-settings-section[open] > summary {
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 4px;
+}
+
+.cla-settings-section .setting-item {
+    border-top: none;
+    padding: 8px 14px;
+}
+
+.cla-nested-settings {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cla-nested-settings .cla-settings-section {
+    margin-bottom: 0;
+}
