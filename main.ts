@@ -1700,10 +1700,13 @@ export default class CoverLetterPlugin extends Plugin {
                 }
             };
 
-            // A router that holds one model at a time drops this model when another app asks for a different one,
+            // Only llama-server sends this header; anything else at the URL is a wrong address, not a model swap.
+            const fromLlamaServer = (r: RequestUrlResponse) =>
+                Object.entries(r.headers).some(([k, v]) => k.toLowerCase() === 'server' && /llama\.cpp/i.test(v));
+            // A router that holds one model at a time drops this model when another client asks for a different one,
             // and answers the request caught in the swap with a 404 or 5xx. It reloads the model on the next request.
             // An unknown model name is a 400, so it is not retried.
-            const swapped = (r: RequestUrlResponse) => r.status === 404 || r.status >= 500;
+            const swapped = (r: RequestUrlResponse) => fromLlamaServer(r) && (r.status === 404 || r.status >= 500);
             let res = await send();
             if (swapped(res)) {
                 console.warn(
@@ -1714,11 +1717,16 @@ export default class CoverLetterPlugin extends Plugin {
                 res = await send();
             }
 
+            if (res.status >= 400 && !fromLlamaServer(res)) {
+                throw new Error(
+                    `The server at ${base} is not llama-server (it answered HTTP ${res.status}). Set the llama.cpp server URL in Settings → AI Providers → llama.cpp.`
+                );
+            }
             if (res.status >= 400) {
                 const detail = this.parseLlamaCppError(res.text);
                 const modelNote = detail.includes(model) ? '' : ` (model "${model}")`;
                 const swapNote = swapped(res)
-                    ? ' The server may be switching models for another app that shares it; try again.'
+                    ? ' The server may be switching models for another client that shares it; try again.'
                     : '';
                 throw new Error(`llama.cpp HTTP ${res.status}${detail ? `: ${detail}` : ''}${modelNote}.${swapNote}`);
             }
