@@ -273,6 +273,40 @@ function asString(v: unknown, fallback = ''): string {
     return fallback;
 }
 
+const CONTACT_ROLE_WORDS =
+    /\b(careers?|recruit\w*|resourcing|talent|hr|human|resources|hiring|manager|team|department|dept|jobs?|vacanc\w*|applications?|people|personnel|staffing|admin\w*|office|reception|info|enquir\w*|inquir\w*|support|services?|the|to|whom|concern|sir|madam)\b/i;
+const NAME_PARTICLES = new Set([
+    'de',
+    'del',
+    'la',
+    'las',
+    'los',
+    'van',
+    'von',
+    'der',
+    'den',
+    'da',
+    'di',
+    'du',
+    'le',
+    'bin',
+    'al',
+    'y',
+]);
+
+/** "Dear <name>," only when the contact reads as a person; mailboxes and roles such as "Careers" get "Dear Sir/Madam,". */
+function salutationFor(contact: unknown): string {
+    const c = asString(contact).replace(/\s+/g, ' ').trim();
+    if (!c) return 'Dear Sir/Madam,';
+    if (/^(mr|mrs|ms|miss|mx|dr|prof|professor)\.?\s+\S/i.test(c)) return `Dear ${c},`;
+    const words = c.split(' ');
+    const nameLike =
+        words.length <= 5 &&
+        /^\p{Lu}/u.test(words[0]) &&
+        words.every((w) => /^\p{Lu}[\p{L}'’.-]*$/u.test(w) || NAME_PARTICLES.has(w));
+    return nameLike && !CONTACT_ROLE_WORDS.test(c) ? `Dear ${c},` : 'Dear Sir/Madam,';
+}
+
 function normalizeLooseText(v: string): string {
     return (v || '')
         .replace(/\r\n/g, '\n')
@@ -472,34 +506,27 @@ export default class CoverLetterPlugin extends Plugin {
         return null;
     }
 
+    /** The settings hold the name of a Keychain entry; the key itself stays in the Keychain. */
     getApiKeyForProvider(provider: string): string {
         const secretId = this.getSecretIdForProvider(provider);
         if (!secretId) return '';
         try {
-            return (this.app as any).secretStorage?.getSecret(secretId) ?? '';
+            const storage = this.app.secretStorage;
+            const value = storage.getSecret(secretId) ?? '';
+            // Up to 1.0.9 the plugin saved the chosen entry's name under its own entry as if it were the key.
+            return storage.listSecrets().includes(value) ? (storage.getSecret(value) ?? '') : value;
         } catch {
             return '';
         }
     }
 
-    getDefaultSecretIdForProvider(provider: string): string | null {
-        if (provider === 'claude') return 'cover-letter-automator-claude-api-key';
-        if (provider === 'gemini') return 'cover-letter-automator-gemini-api-key';
-        if (provider === 'openai') return 'cover-letter-automator-openai-api-key';
-        if (provider === 'groq') return 'cover-letter-automator-groq-api-key';
-        if (provider === 'openrouter') return 'cover-letter-automator-openrouter-api-key';
-        return null;
-    }
-
-    async setApiKeyForProvider(provider: string, apiKey: string): Promise<void> {
-        const secretId = this.getDefaultSecretIdForProvider(provider);
-        if (!secretId) return;
-        (this.app as any).secretStorage?.setSecret(secretId, apiKey.trim());
-        if (provider === 'claude') this.settings.claudeSecretId = secretId;
-        if (provider === 'gemini') this.settings.geminiSecretId = secretId;
-        if (provider === 'openai') this.settings.openaiSecretId = secretId;
-        if (provider === 'groq') this.settings.groqSecretId = secretId;
-        if (provider === 'openrouter') this.settings.openRouterSecretId = secretId;
+    async setSecretIdForProvider(provider: string, secretId: string): Promise<void> {
+        const id = secretId.trim();
+        if (provider === 'claude') this.settings.claudeSecretId = id;
+        if (provider === 'gemini') this.settings.geminiSecretId = id;
+        if (provider === 'openai') this.settings.openaiSecretId = id;
+        if (provider === 'groq') this.settings.groqSecretId = id;
+        if (provider === 'openrouter') this.settings.openRouterSecretId = id;
         await this.saveSettings();
     }
 
@@ -1837,8 +1864,9 @@ export default class CoverLetterPlugin extends Plugin {
         if (!apiKey) {
             throw new Error('No OpenAI API key — set it in Settings → AI Providers (stored in Secret Storage).');
         }
-        try {
-            const response = await this.withAiTimeout(
+        const model = modelOverride || this.settings.openaiModel || 'gpt-4o-mini';
+        const send = (withTemperature: boolean) =>
+            this.withAiTimeout(
                 'OpenAI request',
                 () =>
                     requestUrl({
@@ -1848,18 +1876,41 @@ export default class CoverLetterPlugin extends Plugin {
                             'Content-Type': 'application/json',
                             Authorization: `Bearer ${apiKey}`,
                         },
+                        // Current models reject max_tokens, and reasoning models count their reasoning against
+                        // max_completion_tokens, so it needs room beyond the letter itself.
                         body: JSON.stringify({
-                            model: modelOverride || this.settings.openaiModel || 'gpt-4o-mini',
+                            model,
                             messages: [{ role: 'user', content: prompt }],
-                            temperature: 0.4,
-                            max_tokens: 2048,
+                            temperature: withTemperature ? 0.4 : undefined,
+                            max_completion_tokens: 8192,
                             response_format: isJson ? { type: 'json_object' } : undefined,
                         }),
+                        throw: false,
                     }),
                 signal
             );
-            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
-            if (!text) throw new Error('OpenAI returned an empty response.');
+        const errorOf = (r: RequestUrlResponse): { message: string; param: string } => {
+            try {
+                const err = (r.json as { error?: { message?: unknown; param?: unknown } } | null)?.error;
+                return {
+                    message: typeof err?.message === 'string' ? err.message : r.text.slice(0, 300),
+                    param: typeof err?.param === 'string' ? err.param : '',
+                };
+            } catch {
+                return { message: r.text.slice(0, 300), param: '' };
+            }
+        };
+
+        try {
+            let response = await send(true);
+            // Some models accept only the default temperature.
+            if (response.status === 400 && errorOf(response).param === 'temperature') response = await send(false);
+            if (response.status >= 400) {
+                throw new Error(`HTTP ${response.status}: ${errorOf(response).message} (model "${model}")`);
+            }
+            const data = response.json as { choices?: { message?: { content?: unknown } }[] } | null;
+            const text = data?.choices?.[0]?.message?.content;
+            if (typeof text !== 'string' || !text) throw new Error('OpenAI returned an empty response.');
             return text;
         } catch (e: unknown) {
             throw new Error(`OpenAI Error: ${(e as Error).message}`);
@@ -1984,7 +2035,6 @@ export default class CoverLetterPlugin extends Plugin {
     ): Promise<GeneratedFile> {
         const { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } = await import('docx');
         const FONT = this.settings.fontName || 'Lora';
-        const contact = (data.Contact as string) || 'Hiring Manager';
         const title = ((data['Job Title'] as string) || 'Position').trim();
         const company = ((data.Company as string) || 'Company').trim();
         const address = (data.Address as string) || '';
@@ -2034,7 +2084,7 @@ export default class CoverLetterPlugin extends Plugin {
                         new Paragraph({ children: [run(company, 24, true)], spacing: { before: 100 } }), // 12pt
                         new Paragraph({ children: [run(address, 24)], spacing: { after: 100 } }), // 12pt
                         new Paragraph({
-                            children: [run(`Dear ${contact},`, 24)],
+                            children: [run(salutationFor(data.Contact), 24)],
                             spacing: { before: 200, after: 200 },
                         }), // 12pt
                         ...this.cleanBodyLines(aiResponse, company, title).map(
@@ -2116,7 +2166,6 @@ export default class CoverLetterPlugin extends Plugin {
     ): { html: string; title: string } {
         const FONT = this.settings.fontName || 'Lora';
         const title = ((data['Job Title'] as string) || 'Position').trim();
-        const contact = (data.Contact as string) || 'Hiring Manager';
         const company = (data.Company as string) || '';
         const address = (data.Address as string) || '';
 
@@ -2221,7 +2270,7 @@ export default class CoverLetterPlugin extends Plugin {
     </div>
     <div class="company">${esc(company)}</div>
     <div class="address">${esc(address)}</div>
-    <div class="salutation">Dear ${esc(contact)},</div>
+    <div class="salutation">${esc(salutationFor(data.Contact))}</div>
     <div>${bodyHtml}</div>
     <div class="closing">
         <div>Regards,</div>
@@ -4021,23 +4070,21 @@ class GeneratorModal extends Modal {
                 return;
             }
 
-            const models = PROVIDER_MODELS[provider] || [];
-
-            if (models.length > 0) {
-                models.forEach((m) => {
-                    const opt = modelSel.createEl('option', { text: m, value: m });
-                    if (provider === 'gemini' && m === this.plugin.settings.geminiModel) opt.selected = true;
-                    if (provider === 'claude' && m === this.plugin.settings.claudeModel) opt.selected = true;
-                    if (provider === 'openai' && m === this.plugin.settings.openaiModel) opt.selected = true;
-                    if (provider === 'groq' && m === this.plugin.settings.groqModel) opt.selected = true;
-                    if (provider === 'openrouter' && m === this.plugin.settings.openRouterModel) opt.selected = true;
-                });
-            } else {
-                modelSel.createEl('option', {
-                    text: this.plugin.settings.modelName,
-                    value: this.plugin.settings.modelName,
-                });
-            }
+            // The saved model comes first, so an ID typed in settings is offered even when it is not a suggestion.
+            const st = this.plugin.settings;
+            const saved =
+                {
+                    gemini: st.geminiModel,
+                    claude: st.claudeModel,
+                    openai: st.openaiModel,
+                    groq: st.groqModel,
+                    openrouter: st.openRouterModel,
+                }[provider] ?? '';
+            const models = Array.from(
+                new Set([saved, ...(PROVIDER_MODELS[provider] ?? [])].map((m) => m.trim()).filter(Boolean))
+            );
+            models.forEach((m) => modelSel.createEl('option', { text: m, value: m }));
+            if (saved.trim()) modelSel.value = saved.trim();
         };
 
         await updateModels();
@@ -4620,8 +4667,7 @@ class EmailDraftModal extends Modal {
             setIcon(copyBtn, 'copy');
             copyBtn.createSpan({ text: ' Copy Body' });
             copyBtn.onclick = async () => {
-                const contact = (this.frontmatter.Contact as string) || '';
-                const salutation = contact ? `Dear ${contact},` : 'Dear Sir/Madam,';
+                const salutation = salutationFor(this.frontmatter.Contact);
                 const fullBody = `${salutation}\n\n${bodyEl.value.trim()}\n\nYours sincerely,\n${this.plugin.settings.senderName}`;
                 await navigator.clipboard.writeText(fullBody);
                 new Notice('Email body copied!');
@@ -4652,8 +4698,7 @@ class EmailDraftModal extends Modal {
             status.setText('Building email draft…');
 
             try {
-                const contact = (this.frontmatter.Contact as string) || '';
-                const salutation = contact ? `Dear ${contact},` : 'Dear Sir/Madam,';
+                const salutation = salutationFor(this.frontmatter.Contact);
                 const fullBody = `${salutation}\n\n${bodyEl.value.trim()}\n\nYours sincerely,\n${this.plugin.settings.senderName}`;
 
                 const attachments: { name: string; data: ArrayBuffer; mimeType: string }[] = [

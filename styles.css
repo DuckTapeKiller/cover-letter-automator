@@ -1060,3 +1060,45 @@ body {
 .cla-nested-settings .cla-settings-section {
     margin-bottom: 0;
 }
+
+/* Settings tabs */
+.cla-settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Themes often draw mod-cta like any button, so the active tab sets its own colours. */
+.cla-settings-tabs .cla-settings-tab.mod-cta {
+    background-color: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.cla-settings-pane {
+    display: none;
+}
+
+.cla-settings-pane.is-active {
+    display: block;
+}
+
+/* CV library rows: short label, wide path */
+.cla-cv-row .setting-item-control {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.cla-cv-row .setting-item-control input[type='text'] {
+    flex: 0 0 11em;
+    width: 11em;
+}
+
+.cla-cv-row .setting-item-control input.cla-cv-path {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+}

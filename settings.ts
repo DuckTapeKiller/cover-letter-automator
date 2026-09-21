@@ -1,6 +1,7 @@
 import {
     AbstractInputSuggest,
     App,
+    DropdownComponent,
     PluginSettingTab,
     SecretComponent,
     Setting,
@@ -221,8 +222,11 @@ BANNED WORDS (DO NOT USE):
 IF YOU USE THE BANNED WORDS, ANY MARKDOWN, ANY AMERICAN SPELLINGS, OR IRRELEVANT ACADEMIC BRAGGING, THE TASK IS A FAILURE.`,
 };
 
+type SettingsPane = 'profile' | 'ai' | 'letters' | 'jobs' | 'advanced';
+
 export class CoverLetterSettingTab extends PluginSettingTab {
     plugin: CoverLetterPlugin;
+    private activePane: SettingsPane = 'profile';
     private modelDatalists: Map<string, HTMLElement> = new Map();
     private modelFetchers: Map<string, () => Promise<string[]>> = new Map();
 
@@ -292,11 +296,40 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
     async display(): Promise<void> {
         const { containerEl } = this;
+        // Adding or removing a CV redraws the tab; keep the reader where they were instead of jumping to the top.
+        const scrollTop = containerEl.scrollTop;
         containerEl.empty();
-        containerEl.createEl('h2', { text: 'Cover Letter Automator' });
+
+        // One page per group instead of one long panel; the chosen tab survives redraws.
+        const tabs: { id: SettingsPane; label: string }[] = [
+            { id: 'profile', label: 'Profile' },
+            { id: 'ai', label: 'AI models' },
+            { id: 'letters', label: 'Letters' },
+            { id: 'jobs', label: 'Job dashboard' },
+            { id: 'advanced', label: 'Advanced' },
+        ];
+        const tabBar = containerEl.createDiv({ cls: 'cla-settings-tabs' });
+        const panes = {} as Record<SettingsPane, HTMLElement>;
+        const tabButtons: { id: SettingsPane; el: HTMLElement }[] = [];
+        const showPane = (id: SettingsPane) => {
+            this.activePane = id;
+            for (const b of tabButtons) {
+                b.el.toggleClass('mod-cta', b.id === id);
+                panes[b.id].toggleClass('is-active', b.id === id);
+            }
+        };
+        for (const tab of tabs) {
+            const el = tabBar.createEl('button', { cls: 'cla-settings-tab', text: tab.label });
+            el.addEventListener('click', () => {
+                showPane(tab.id);
+                containerEl.scrollTop = 0;
+            });
+            tabButtons.push({ id: tab.id, el });
+            panes[tab.id] = containerEl.createDiv({ cls: 'cla-settings-pane' });
+        }
 
         // ── SENDER IDENTITY ──────────────────────────────────────────────
-        const identitySection = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const identitySection = panes.profile.createEl('details', { cls: 'cla-settings-section' });
         identitySection.open = true;
         const identitySummary = identitySection.createEl('summary');
         setIcon(identitySummary, 'user');
@@ -332,6 +365,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 })
         );
 
+        let defaultFieldDropdown: DropdownComponent | undefined;
         new Setting(identitySection)
             .setName('Professional Fields')
             .setDesc('Comma-separated list of fields shown in the generation modal.')
@@ -342,7 +376,13 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                         .map((s) => s.trim())
                         .filter(Boolean);
                     await this.plugin.saveSettings();
-                    this.display();
+                    // Refill the list in place: redrawing the tab would take the cursor out of this box.
+                    const dd = defaultFieldDropdown;
+                    if (dd) {
+                        dd.selectEl.empty();
+                        for (const f of this.plugin.settings.professionalFields) dd.addOption(f, f);
+                        dd.setValue(this.plugin.settings.defaultField);
+                    }
                 })
             );
 
@@ -350,6 +390,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             .setName('Default Field')
             .setDesc('This field will be pre-selected in the generation modal.')
             .addDropdown((dd) => {
+                defaultFieldDropdown = dd;
                 this.plugin.settings.professionalFields.forEach((f) => dd.addOption(f, f));
                 dd.setValue(this.plugin.settings.defaultField);
                 dd.onChange(async (v) => {
@@ -359,7 +400,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         // ── CANDIDATE PROFILE ────────────────────────────────────────────
-        const profileSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const profileSection = panes.profile.createEl('details', { cls: 'cla-settings-section' });
         profileSection.open = true;
         const profileSummary = profileSection.createEl('summary');
         setIcon(profileSummary, 'book-open');
@@ -413,9 +454,12 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         expSet.controlEl.style.marginTop = '10px';
 
         // ── AI PROVIDERS ─────────────────────────────────────────────────
-        const aiSection = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const aiSection = panes.ai.createEl('details', { cls: 'cla-settings-section' });
         aiSection.open = true;
         aiSection.createEl('summary', { text: '◈ AI Providers' });
+
+        // Only the active provider's section starts expanded; the rest open on click.
+        const providerSections = new Map<AiProvider, HTMLDetailsElement>();
 
         new Setting(aiSection)
             .setName('Active Provider')
@@ -433,6 +477,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 dd.onChange(async (v) => {
                     this.plugin.settings.aiProvider = v as AiProvider;
                     await this.plugin.saveSettings();
+                    providerSections.forEach((section, provider) => (section.open = provider === v));
                 });
             });
 
@@ -465,20 +510,26 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         const nested = aiSection.createDiv('cla-nested-settings');
+        const providerSection = (provider: AiProvider, title: string) => {
+            const section = nested.createEl('details', { cls: 'cla-settings-section' });
+            section.open = provider === this.plugin.settings.aiProvider;
+            section.createEl('summary', { text: title });
+            providerSections.set(provider, section);
+            return section;
+        };
 
+        // The component picks a Keychain entry and reports its name, never the key.
         const apiKeyComponent = (container: HTMLElement, provider: AiProvider) => {
             const secret = new SecretComponent(this.app, container);
-            secret.setValue(this.plugin.getApiKeyForProvider(provider));
-            secret.onChange((v) => {
-                void this.plugin.setApiKeyForProvider(provider, v.trim());
+            secret.setValue(this.plugin.getSecretIdForProvider(provider) ?? '');
+            secret.onChange((id) => {
+                void this.plugin.setSecretIdForProvider(provider, id);
             });
             return secret;
         };
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ Ollama (Local)' });
+            const s = providerSection('ollama', '◈ Ollama (Local)');
 
             new Setting(s)
                 .setName('Ollama URL')
@@ -492,7 +543,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                             await this.plugin.saveSettings();
                         })
                 )
-                .addButton((btn) => btn.setButtonText('Refresh Models').onClick(() => void this.updateModelLists())),
+                .addButton((btn) => btn.setButtonText('Refresh models').onClick(() => void this.updateModelLists()));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model name, or pick from your installed models.'),
@@ -578,9 +629,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ LM Studio (Local)' });
+            const s = providerSection('lmstudio', '◈ LM Studio (Local)');
 
             new Setting(s)
                 .setName('LM Studio URL')
@@ -594,7 +643,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                             await this.plugin.saveSettings();
                         })
                 )
-                .addButton((btn) => btn.setButtonText('Refresh Models').onClick(() => void this.updateModelLists())),
+                .addButton((btn) => btn.setButtonText('Refresh models').onClick(() => void this.updateModelLists()));
 
             this.buildModelCombo(
                 new Setting(s).setName('Model').setDesc('Type any model ID, or pick from your loaded models.'),
@@ -609,9 +658,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ llama.cpp (Local)' });
+            const s = providerSection('llamacpp', '◈ llama.cpp (Local)');
 
             new Setting(s)
                 .setName('llama.cpp server URL')
@@ -672,9 +719,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ Anthropic Claude' });
+            const s = providerSection('claude', '◈ Anthropic Claude');
 
             new Setting(s)
                 .setName('API Key')
@@ -694,9 +739,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ Google Gemini' });
+            const s = providerSection('gemini', '◈ Google Gemini');
 
             new Setting(s)
                 .setName('API Key')
@@ -716,9 +759,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ OpenAI GPT' });
+            const s = providerSection('openai', '◈ OpenAI GPT');
 
             new Setting(s)
                 .setName('API Key')
@@ -738,9 +779,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ Groq' });
+            const s = providerSection('groq', '◈ Groq');
 
             new Setting(s)
                 .setName('API Key')
@@ -760,9 +799,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         {
-            const s = nested.createEl('details', { cls: 'cla-settings-section' });
-            s.open = true;
-            s.createEl('summary', { text: '◈ OpenRouter' });
+            const s = providerSection('openrouter', '◈ OpenRouter');
 
             new Setting(s)
                 .setName('API Key')
@@ -782,7 +819,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         }
 
         // ── DESIGN & FOLDERS ─────────────────────────────────────────────
-        const design = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const design = panes.letters.createEl('details', { cls: 'cla-settings-section' });
         design.open = true;
         const designSummary = design.createEl('summary');
         setIcon(designSummary, 'palette');
@@ -882,7 +919,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         // ── JOB DASHBOARD ────────────────────────────────────────────────
-        const jobDash = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const jobDash = panes.jobs.createEl('details', { cls: 'cla-settings-section' });
         jobDash.open = false;
         const jobDashSummary = jobDash.createEl('summary');
         setIcon(jobDashSummary, 'rss');
@@ -937,7 +974,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         // ── CV LIBRARY ───────────────────────────────────────────────────
-        const cv = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const cv = panes.letters.createEl('details', { cls: 'cla-settings-section' });
         cv.open = true;
         const cvSummary = cv.createEl('summary');
         setIcon(cvSummary, 'folder-heart');
@@ -956,6 +993,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
         this.plugin.settings.cvPaths.forEach((cvItem, index) => {
             new Setting(cv)
+                .setClass('cla-cv-row')
                 .addText((t) =>
                     t
                         .setPlaceholder('Label (e.g. Developer CV)')
@@ -966,6 +1004,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                         })
                 )
                 .addText((t) => {
+                    t.inputEl.addClass('cla-cv-path');
                     new FileSuggest(this.app, t.inputEl);
                     t.setPlaceholder('Path/to/CV.pdf')
                         .setValue(cvItem.path)
@@ -988,7 +1027,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         });
 
         // ── LANGUAGE ─────────────────────────────────────────────────────
-        const lang = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const lang = panes.letters.createEl('details', { cls: 'cla-settings-section' });
         lang.open = true;
         const langSummary = lang.createEl('summary');
         setIcon(langSummary, 'languages');
@@ -1021,7 +1060,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         // ── ADVANCED CUSTOMISATION ───────────────────────────────────────
-        const adv = containerEl.createEl('details', { cls: 'cla-settings-section' });
+        const adv = panes.advanced.createEl('details', { cls: 'cla-settings-section' });
         adv.open = false;
         const advSummary = adv.createEl('summary');
         setIcon(advSummary, 'settings-2');
@@ -1065,6 +1104,9 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         promptSetting.settingEl.style.alignItems = 'flex-start';
         promptSetting.controlEl.style.width = '100%';
         promptSetting.controlEl.style.marginTop = '10px';
+
+        showPane(this.activePane);
+        containerEl.scrollTop = scrollTop;
     }
 }
 
