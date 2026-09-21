@@ -1,6 +1,6 @@
 # Cover Letter Automator
 
-› Version 1.0.0
+› Version 1.0.9
 ◈ Developed by DuckTapeKiller
 
 A high-fidelity Obsidian plugin designed for senior professionals and executives. This tool automates the generation of hyper-tailored, formal cover letters and application emails by grounding AI models in your specific candidate profile and the target job description.
@@ -18,9 +18,13 @@ Manage an unlimited collection of CV versions (e.g., Tech CV, Management CV, Cre
 › Executive Tone Engineering
 Hardcoded linguistic constraints enforce a direct, senior executive persona. The system automatically prohibits flowery clichés ("passionate," "keen interest," "thrilled") and banned terminology ("hone," "honed") to ensure a professional, value-first approach.
 
+› British English Humaniser
+When the output language is British English, each cover letter gets a second pass that removes AI writing patterns (not-X-but-Y contrasts, one-line closers, dashes, forced triads, stock AI words, inflated claims) and enforces British spelling. The rules are adapted from blader/humanizer (MIT). American English and Spanish letters are not humanised. The pass can be switched off under Language.
+
 › Multi-Provider Support
 Toggle between local and cloud-based intelligence per-generation:
 ◈ Ollama (Local/Private)
+◈ llama.cpp (Local/Private, llama-server in single-model or router mode)
 ◈ Google Gemini (OpenAI Compatibility Layer)
 ◈ Anthropic Claude
 ◈ OpenAI GPT

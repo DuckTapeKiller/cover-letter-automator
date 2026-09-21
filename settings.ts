@@ -11,7 +11,7 @@ import {
 import type CoverLetterPlugin from './main';
 import { PROVIDER_MODELS } from './main';
 
-export type AiProvider = 'ollama' | 'lmstudio' | 'claude' | 'gemini' | 'openai' | 'groq' | 'openrouter';
+export type AiProvider = 'ollama' | 'lmstudio' | 'llamacpp' | 'claude' | 'gemini' | 'openai' | 'groq' | 'openrouter';
 
 export interface CoverLetterSettings {
     // Folders
@@ -65,6 +65,12 @@ export interface CoverLetterSettings {
     lmStudioUrl: string;
     lmStudioModel: string;
 
+    // llama.cpp (llama-server)
+    llamaCppUrl: string;
+    llamaCppModel: string;
+    llamaCppMaxTokens: number;
+    llamaCppMaxRequestMinutes: number;
+
     // Claude (Secret Storage)
     claudeSecretId: string;
     claudeModel: string;
@@ -97,6 +103,7 @@ export interface CoverLetterSettings {
 
     // Language
     language: string;
+    humaniseLetters: boolean;
 }
 
 export const DEFAULT_SETTINGS: CoverLetterSettings = {
@@ -141,6 +148,11 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
     lmStudioUrl: 'http://localhost:1234',
     lmStudioModel: '',
 
+    llamaCppUrl: 'http://127.0.0.1:8080',
+    llamaCppModel: '',
+    llamaCppMaxTokens: 8192,
+    llamaCppMaxRequestMinutes: 10,
+
     claudeSecretId: '',
     claudeModel: 'claude-3-5-haiku-latest',
 
@@ -158,6 +170,7 @@ export const DEFAULT_SETTINGS: CoverLetterSettings = {
 
     cvPaths: [],
     language: 'en-GB',
+    humaniseLetters: true,
 
     defaultTone: 'Standard',
     enableStrategyAnalysis: false,
@@ -410,6 +423,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             .addDropdown((dd) => {
                 dd.addOption('ollama', 'Ollama (local)');
                 dd.addOption('lmstudio', 'LM Studio (local)');
+                dd.addOption('llamacpp', 'llama.cpp (local)');
                 dd.addOption('claude', 'Anthropic Claude (API)');
                 dd.addOption('gemini', 'Google Gemini (API)');
                 dd.addOption('openai', 'OpenAI GPT (API)');
@@ -591,6 +605,69 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     this.plugin.settings.lmStudioModel = model;
                     await this.plugin.saveSettings();
                 }
+            );
+        }
+
+        {
+            const s = nested.createEl('details', { cls: 'cla-settings-section' });
+            s.open = true;
+            s.createEl('summary', { text: '◈ llama.cpp (Local)' });
+
+            new Setting(s)
+                .setName('llama.cpp server URL')
+                .setDesc(
+                    'Base URL of your llama-server. In router mode, a model that is not loaded is loaded on its first request.'
+                )
+                .addText((t) =>
+                    t
+                        .setPlaceholder(DEFAULT_SETTINGS.llamaCppUrl)
+                        .setValue(this.plugin.settings.llamaCppUrl)
+                        .onChange(async (v) => {
+                            this.plugin.settings.llamaCppUrl = v;
+                            await this.plugin.saveSettings();
+                        })
+                )
+                .addButton((btn) => btn.setButtonText('Refresh models').onClick(() => void this.updateModelLists()));
+
+            this.buildModelCombo(
+                new Setting(s).setName('Model').setDesc('Type any model ID, or pick one the server lists.'),
+                'cla-llamacpp-models',
+                async () => await this.plugin.fetchLlamaCppModels(),
+                this.plugin.settings.llamaCppModel,
+                async (model) => {
+                    this.plugin.settings.llamaCppModel = model;
+                    await this.plugin.saveSettings();
+                }
+            );
+
+            type LlamaCppNumberKey = 'llamaCppMaxTokens' | 'llamaCppMaxRequestMinutes';
+            const numberSetting = (name: string, desc: string, key: LlamaCppNumberKey, min: number) =>
+                new Setting(s)
+                    .setName(name)
+                    .setDesc(desc)
+                    .addText((t) =>
+                        t
+                            .setPlaceholder(String(DEFAULT_SETTINGS[key]))
+                            .setValue(String(this.plugin.settings[key]))
+                            .onChange(async (v) => {
+                                const n = Number(v);
+                                this.plugin.settings[key] =
+                                    Number.isFinite(n) && n >= min ? Math.round(n) : DEFAULT_SETTINGS[key];
+                                await this.plugin.saveSettings();
+                            })
+                    );
+
+            numberSetting(
+                'Maximum output tokens',
+                'Tokens the model may generate per request, reasoning included. Reasoning models think before they answer, so keep this well above the length of a letter.',
+                'llamaCppMaxTokens',
+                512
+            );
+            numberSetting(
+                'Maximum request time',
+                'Minutes to wait for a whole reply. In router mode this includes loading the model.',
+                'llamaCppMaxRequestMinutes',
+                1
             );
         }
 
@@ -930,6 +1007,18 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 });
             });
+
+        new Setting(lang)
+            .setName('Humanise letters')
+            .setDesc(
+                'Rewrites each letter to remove AI writing patterns, using one extra AI call per letter. Runs only when the output language above is `British English`; other languages are left as written.'
+            )
+            .addToggle((t) =>
+                t.setValue(this.plugin.settings.humaniseLetters).onChange(async (v) => {
+                    this.plugin.settings.humaniseLetters = v;
+                    await this.plugin.saveSettings();
+                })
+            );
 
         // ── ADVANCED CUSTOMISATION ───────────────────────────────────────
         const adv = containerEl.createEl('details', { cls: 'cla-settings-section' });
