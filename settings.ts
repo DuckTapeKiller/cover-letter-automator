@@ -246,9 +246,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             t.setPlaceholder('Type or select a model…');
             t.inputEl.setCssProps({ width: '100%' });
 
-            const doc = (window as any).activeDocument ?? document;
-            const datalist = doc.createElement('datalist');
-            datalist.id = datalistId;
+            const datalist = createEl('datalist', { attr: { id: datalistId } });
             t.inputEl.setAttribute('list', datalistId);
             t.inputEl.after(datalist);
 
@@ -260,11 +258,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
             getModels()
                 .then((models) => {
-                    models.forEach((m) => {
-                        const opt = doc.createElement('option');
-                        opt.value = m;
-                        datalist.appendChild(opt);
-                    });
+                    models.forEach((m) => datalist.createEl('option', { value: m }));
                 })
                 .catch(() => {});
 
@@ -283,18 +277,14 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             try {
                 const models = await fetcher();
                 datalist.empty();
-                models.forEach((m) => {
-                    const opt = document.createElement('option');
-                    opt.value = m;
-                    datalist.appendChild(opt);
-                });
+                models.forEach((m) => datalist.createEl('option', { value: m }));
             } catch (e) {
                 console.error(`Failed to refresh model list ${id}:`, e);
             }
         }
     }
 
-    async display(): Promise<void> {
+    display(): void {
         const { containerEl } = this;
         // Adding or removing a CV redraws the tab; keep the reader where they were instead of jumping to the top.
         const scrollTop = containerEl.scrollTop;
@@ -335,7 +325,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         setIcon(identitySummary, 'user');
         identitySummary.createSpan({ text: ' Sender Identity' });
 
-        new Setting(identitySection).setName('Full Name').addText((t) =>
+        new Setting(identitySection).setName('Full name').addText((t) =>
             t
                 .setPlaceholder('DuckTapeKiller')
                 .setValue(this.plugin.settings.senderName)
@@ -367,7 +357,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
         let defaultFieldDropdown: DropdownComponent | undefined;
         new Setting(identitySection)
-            .setName('Professional Fields')
+            .setName('Professional fields')
             .setDesc('Comma-separated list of fields shown in the generation modal.')
             .addTextArea((t) =>
                 t.setValue(this.plugin.settings.professionalFields.join(', ')).onChange(async (v) => {
@@ -387,11 +377,11 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(identitySection)
-            .setName('Default Field')
+            .setName('Default field')
             .setDesc('This field will be pre-selected in the generation modal.')
             .addDropdown((dd) => {
                 defaultFieldDropdown = dd;
-                this.plugin.settings.professionalFields.forEach((f) => dd.addOption(f, f));
+                for (const f of this.plugin.settings.professionalFields) dd.addOption(f, f);
                 dd.setValue(this.plugin.settings.defaultField);
                 dd.onChange(async (v) => {
                     this.plugin.settings.defaultField = v;
@@ -406,10 +396,9 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         setIcon(profileSummary, 'book-open');
         profileSummary.createSpan({ text: ' Candidate Profile' });
 
-        new Setting(profileSection).setName('Professional Summary').addTextArea((t) => {
+        new Setting(profileSection).setName('Professional summary').addTextArea((t) => {
             t.inputEl.rows = 6;
-            t.inputEl.style.width = '100%';
-            t.inputEl.style.resize = 'vertical';
+            t.inputEl.addClass('cla-settings-textarea');
             t.setValue(this.plugin.settings.candidateProfile).onChange(async (v) => {
                 this.plugin.settings.candidateProfile = v;
                 await this.plugin.saveSettings();
@@ -418,8 +407,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
         new Setting(profileSection).setName('Skills').addTextArea((t) => {
             t.inputEl.rows = 6;
-            t.inputEl.style.width = '100%';
-            t.inputEl.style.resize = 'vertical';
+            t.inputEl.addClass('cla-settings-textarea');
             t.setValue(this.plugin.settings.candidateSkills).onChange(async (v) => {
                 this.plugin.settings.candidateSkills = v;
                 await this.plugin.saveSettings();
@@ -428,41 +416,36 @@ export class CoverLetterSettingTab extends PluginSettingTab {
 
         new Setting(profileSection).setName('Education').addTextArea((t) => {
             t.inputEl.rows = 8;
-            t.inputEl.style.width = '100%';
-            t.inputEl.style.resize = 'vertical';
+            t.inputEl.addClass('cla-settings-textarea');
             t.setValue(this.plugin.settings.candidateEducation).onChange(async (v) => {
                 this.plugin.settings.candidateEducation = v;
                 await this.plugin.saveSettings();
             });
         });
 
-        const expSet = new Setting(profileSection)
-            .setName('Work Experience')
+        new Setting(profileSection)
+            .setClass('cla-stacked-setting')
+            .setName('Work experience')
             .setDesc('Your full career history.')
             .addTextArea((t) => {
                 t.inputEl.rows = 15;
-                t.inputEl.style.width = '100%';
-                t.inputEl.style.resize = 'vertical';
+                t.inputEl.addClass('cla-settings-textarea');
                 t.setValue(this.plugin.settings.candidateExperience).onChange(async (v) => {
                     this.plugin.settings.candidateExperience = v;
                     await this.plugin.saveSettings();
                 });
             });
-        expSet.settingEl.style.flexDirection = 'column';
-        expSet.settingEl.style.alignItems = 'flex-start';
-        expSet.controlEl.style.width = '100%';
-        expSet.controlEl.style.marginTop = '10px';
 
         // ── AI PROVIDERS ─────────────────────────────────────────────────
         const aiSection = panes.ai.createEl('details', { cls: 'cla-settings-section' });
         aiSection.open = true;
-        aiSection.createEl('summary', { text: '◈ AI Providers' });
+        aiSection.createEl('summary', { text: '◈ AI providers' });
 
         // Only the active provider's section starts expanded; the rest open on click.
         const providerSections = new Map<AiProvider, HTMLDetailsElement>();
 
         new Setting(aiSection)
-            .setName('Active Provider')
+            .setName('Active provider')
             .setDesc('Choose which AI service generates the cover letter body.')
             .addDropdown((dd) => {
                 dd.addOption('ollama', 'Ollama (local)');
@@ -471,8 +454,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 dd.addOption('claude', 'Anthropic Claude (API)');
                 dd.addOption('gemini', 'Google Gemini (API)');
                 dd.addOption('openai', 'OpenAI GPT (API)');
-                dd.addOption('groq', 'Groq (High Speed)');
-                dd.addOption('openrouter', 'OpenRouter (Free/Aggregator)');
+                dd.addOption('groq', 'Groq (high speed)');
+                dd.addOption('openrouter', 'OpenRouter (free/aggregator)');
                 dd.setValue(this.plugin.settings.aiProvider);
                 dd.onChange(async (v) => {
                     this.plugin.settings.aiProvider = v as AiProvider;
@@ -482,14 +465,14 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         new Setting(aiSection)
-            .setName('Default Tone')
+            .setName('Default tone')
             .setDesc('The default writing style for your letters.')
             .addDropdown((dd) => {
-                dd.addOption('Standard', 'Standard Professional');
-                dd.addOption('Formal', 'Formal / Executive');
-                dd.addOption('Brief', 'Brief / Concise');
-                dd.addOption('Aggressive', 'Aggressive / High Energy');
-                dd.addOption('Conversational', 'Conversational / Friendly');
+                dd.addOption('Standard', 'Standard professional');
+                dd.addOption('Formal', 'Formal / executive');
+                dd.addOption('Brief', 'Brief / concise');
+                dd.addOption('Aggressive', 'Aggressive / high energy');
+                dd.addOption('Conversational', 'Conversational / friendly');
                 dd.setValue(this.plugin.settings.defaultTone);
                 dd.onChange(async (v) => {
                     this.plugin.settings.defaultTone = v;
@@ -536,7 +519,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 .setDesc('Base URL of your local Ollama server.')
                 .addText((t) =>
                     t
-                        .setPlaceholder('http://localhost:11434')
+                        .setPlaceholder(DEFAULT_SETTINGS.ollamaUrl)
                         .setValue(this.plugin.settings.ollamaUrl)
                         .onChange(async (v) => {
                             this.plugin.settings.ollamaUrl = v;
@@ -562,7 +545,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             new Setting(s)
                 .setName('Context window')
                 .setDesc(
-                    'Maximum Ollama context tokens for plugin requests. 8192 is safer for large local models on 24GB Macs; increase only if prompts are being truncated.'
+                    'Maximum Ollama context tokens for plugin requests. Keep 8192 for large local models on a Mac with 24 GB of memory, and raise it only if prompts are being truncated.'
                 )
                 .addText((t) =>
                     t
@@ -636,7 +619,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
                 .setDesc('Base URL of your LM Studio local server.')
                 .addText((t) =>
                     t
-                        .setPlaceholder('http://localhost:1234')
+                        .setPlaceholder(DEFAULT_SETTINGS.lmStudioUrl)
                         .setValue(this.plugin.settings.lmStudioUrl)
                         .onChange(async (v) => {
                             this.plugin.settings.lmStudioUrl = v;
@@ -722,8 +705,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             const s = providerSection('claude', '◈ Anthropic Claude');
 
             new Setting(s)
-                .setName('API Key')
-                .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
+                .setName('API key')
+                .setDesc('Stored in Obsidian secret storage (not in data.json).')
                 .addComponent((el) => apiKeyComponent(el, 'claude'));
 
             this.buildModelCombo(
@@ -742,8 +725,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             const s = providerSection('gemini', '◈ Google Gemini');
 
             new Setting(s)
-                .setName('API Key')
-                .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
+                .setName('API key')
+                .setDesc('Stored in Obsidian secret storage (not in data.json).')
                 .addComponent((el) => apiKeyComponent(el, 'gemini'));
 
             this.buildModelCombo(
@@ -762,8 +745,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             const s = providerSection('openai', '◈ OpenAI GPT');
 
             new Setting(s)
-                .setName('API Key')
-                .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
+                .setName('API key')
+                .setDesc('Stored in Obsidian secret storage (not in data.json).')
                 .addComponent((el) => apiKeyComponent(el, 'openai'));
 
             this.buildModelCombo(
@@ -782,8 +765,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             const s = providerSection('groq', '◈ Groq');
 
             new Setting(s)
-                .setName('API Key')
-                .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
+                .setName('API key')
+                .setDesc('Stored in Obsidian secret storage (not in data.json).')
                 .addComponent((el) => apiKeyComponent(el, 'groq'));
 
             this.buildModelCombo(
@@ -802,8 +785,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             const s = providerSection('openrouter', '◈ OpenRouter');
 
             new Setting(s)
-                .setName('API Key')
-                .setDesc('Stored in Obsidian Secret Storage (not in data.json).')
+                .setName('API key')
+                .setDesc('Stored in Obsidian secret storage (not in data.json).')
                 .addComponent((el) => apiKeyComponent(el, 'openrouter'));
 
             this.buildModelCombo(
@@ -826,8 +809,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         designSummary.createSpan({ text: ' Design & Folders' });
 
         new Setting(design)
-            .setName('Font Family')
-            .setDesc('Must be installed on your system (PDF) or available to docx viewers.')
+            .setName('Font family')
+            .setDesc('Must be installed on your system (PDF) or available to DOCX viewers.')
             .addText((t) =>
                 t
                     .setPlaceholder('Lora')
@@ -839,8 +822,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(design)
-            .setName('Page Margin (twips)')
-            .setDesc('1440 twips = 1 inch. Range: 720 (½ in) – 2880 (2 in).')
+            .setName('Page margin (twips)')
+            .setDesc('One inch is 1440 twips. Range: 720 (½ in) – 2880 (2 in).')
             .addSlider((sl) =>
                 sl
                     .setLimits(720, 2880, 120)
@@ -853,7 +836,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(design)
-            .setName('Signature Image')
+            .setName('Signature image')
             .setDesc('Optional: Path to a PNG of your handwritten signature (transparent background recommended).')
             .addText((t) => {
                 new FileSuggest(this.app, t.inputEl);
@@ -866,7 +849,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         new Setting(design)
-            .setName('Signature Height')
+            .setName('Signature height')
             .setDesc('Adjust the size of your signature in the PDF (in pixels). Default: 85.')
             .addSlider((sl) =>
                 sl
@@ -880,11 +863,11 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(design)
-            .setName('Output Folder')
+            .setName('Output folder')
             .setDesc('Vault path where generated files are saved.')
             .addText((t) => {
                 new FolderSuggest(this.app, t.inputEl);
-                t.setPlaceholder('Cover Letters')
+                t.setPlaceholder(DEFAULT_SETTINGS.outputFolder)
                     .setValue(this.plugin.settings.outputFolder)
                     .onChange(async (v) => {
                         this.plugin.settings.outputFolder = v;
@@ -893,7 +876,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         new Setting(design)
-            .setName('Interview Prep Folder')
+            .setName('Interview prep folder')
             .setDesc('Vault path where interview playbooks are saved.')
             .addText((t) => {
                 new FolderSuggest(this.app, t.inputEl);
@@ -906,7 +889,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             });
 
         new Setting(design)
-            .setName('Jobs Folder')
+            .setName('Jobs folder')
             .setDesc('Vault path where imported job notes are saved.')
             .addText((t) => {
                 new FolderSuggest(this.app, t.inputEl);
@@ -926,8 +909,8 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         jobDashSummary.createSpan({ text: ' Job Dashboard' });
 
         new Setting(jobDash)
-            .setName('Auto Refresh')
-            .setDesc('Periodically refresh the Job Dashboard while Obsidian is open.')
+            .setName('Auto refresh')
+            .setDesc('Periodically refresh the job dashboard while Obsidian is open.')
             .addToggle((t) =>
                 t.setValue(this.plugin.settings.jobDashboardAutoRefresh).onChange(async (v) => {
                     this.plugin.settings.jobDashboardAutoRefresh = v;
@@ -936,7 +919,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(jobDash)
-            .setName('Refresh Interval (minutes)')
+            .setName('Refresh interval (minutes)')
             .setDesc('Recommended: 60–240. Changes apply after reloading the plugin.')
             .addSlider((sl) =>
                 sl
@@ -950,7 +933,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(jobDash)
-            .setName('Refresh on Startup')
+            .setName('Refresh on startup')
             .setDesc('If enabled, a background refresh runs shortly after Obsidian loads.')
             .addToggle((t) =>
                 t.setValue(this.plugin.settings.jobDashboardRefreshOnStartup).onChange(async (v) => {
@@ -960,12 +943,12 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         new Setting(jobDash)
-            .setName('Open Dashboard')
-            .setDesc('Opens the Job Dashboard modal.')
+            .setName('Open dashboard')
+            .setDesc('Opens the job dashboard modal.')
             .addButton((btn) => btn.setButtonText('Open').onClick(() => this.plugin.openJobDashboard()));
 
         new Setting(jobDash)
-            .setName('Refresh Now')
+            .setName('Refresh now')
             .setDesc('Refreshes the job listings cache (you can also refresh from inside the modal).')
             .addButton((btn) =>
                 btn.setButtonText('Refresh').onClick(() => {
@@ -981,10 +964,10 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         cvSummary.createSpan({ text: ' CV Library' });
 
         new Setting(cv)
-            .setName('Add CV to Library')
+            .setName('Add CV to library')
             .setDesc('Add a new CV version to your collection.')
             .addButton((btn) =>
-                btn.setButtonText('+ Add CV').onClick(async () => {
+                btn.setButtonText('Add CV').onClick(async () => {
                     this.plugin.settings.cvPaths.push({ name: 'New CV', path: '' });
                     await this.plugin.saveSettings();
                     this.display();
@@ -1034,7 +1017,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         langSummary.createSpan({ text: ' Language' });
 
         new Setting(lang)
-            .setName('Output Language')
+            .setName('Output language')
             .setDesc('The language the AI will use to write the cover letter and email.')
             .addDropdown((dd) => {
                 dd.addOption('en-GB', 'British English');
@@ -1067,7 +1050,7 @@ export class CoverLetterSettingTab extends PluginSettingTab {
         advSummary.createSpan({ text: ' AI Customisation (Advanced)' });
 
         new Setting(adv)
-            .setName('Custom Banned Words')
+            .setName('Custom banned words')
             .setDesc('Comma-separated list of words/phrases the AI is forbidden to use.')
             .addTextArea((t) =>
                 t.setValue(this.plugin.settings.customBannedWords.join(', ')).onChange(async (v) => {
@@ -1080,30 +1063,24 @@ export class CoverLetterSettingTab extends PluginSettingTab {
             );
 
         adv.querySelectorAll('textarea').forEach((t) => {
-            (t as HTMLTextAreaElement).style.width = '100%';
-            (t as HTMLTextAreaElement).style.resize = 'vertical';
-            (t as HTMLTextAreaElement).rows = 4;
+            t.addClass('cla-settings-textarea');
+            t.rows = 4;
         });
 
-        const promptSetting = new Setting(adv)
-            .setName('Base Prompt')
+        new Setting(adv)
+            .setClass('cla-stacked-setting')
+            .setName('Base prompt')
             .setDesc(
                 'Modify the core AI instructions. Use {profile}, {strategy}, {jobContent}, {language}, and {bannedWords}.'
             )
             .addTextArea((t) => {
                 t.inputEl.rows = 30;
-                t.inputEl.style.width = '100%';
-                t.inputEl.style.resize = 'vertical';
-                t.inputEl.style.fontFamily = 'monospace';
+                t.inputEl.addClass('cla-settings-textarea', 'cla-mono');
                 t.setValue(this.plugin.settings.customPrompt).onChange(async (v) => {
                     this.plugin.settings.customPrompt = v;
                     await this.plugin.saveSettings();
                 });
             });
-        promptSetting.settingEl.style.flexDirection = 'column';
-        promptSetting.settingEl.style.alignItems = 'flex-start';
-        promptSetting.controlEl.style.width = '100%';
-        promptSetting.controlEl.style.marginTop = '10px';
 
         showPane(this.activePane);
         containerEl.scrollTop = scrollTop;

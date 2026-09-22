@@ -1,28 +1,49 @@
-import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import eslintConfigPrettier from 'eslint-config-prettier';
+import { defineConfig } from 'eslint/config';
+import obsidianmd from 'eslint-plugin-obsidianmd';
+import { DEFAULT_BRANDS } from 'eslint-plugin-obsidianmd/dist/lib/rules/ui/brands.js';
+import { DEFAULT_ACRONYMS } from 'eslint-plugin-obsidianmd/dist/lib/rules/ui/acronyms.js';
 import eslintPluginPrettier from 'eslint-plugin-prettier';
 
-export default tseslint.config(
-    eslint.configs.recommended,
-    ...tseslint.configs.recommended,
+export default defineConfig([
+    { ignores: ['main.js'] },
+    ...obsidianmd.configs.recommended,
     {
-        linterOptions: {
-            reportUnusedDisableDirectives: 'off',
+        languageOptions: {
+            parserOptions: {
+                projectService: {
+                    allowDefaultProject: ['eslint.config.mjs', 'esbuild.config.mjs'],
+                },
+                tsconfigRootDir: import.meta.dirname,
+            },
         },
-        plugins: {
-            prettier: eslintPluginPrettier,
-        },
+        plugins: { prettier: eslintPluginPrettier },
         rules: {
-            ...eslintConfigPrettier.rules,
             'prettier/prettier': 'error',
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-            '@typescript-eslint/no-require-imports': 'off',
-            'preserve-caught-error': 'off',
+            // Custom lists replace the defaults, so ours are appended to them.
+            'obsidianmd/ui/sentence-case': [
+                'warn',
+                {
+                    brands: [
+                        ...DEFAULT_BRANDS,
+                        'Cover Letter Automator',
+                        'Ollama',
+                        'LM Studio',
+                        'llama.cpp',
+                        'OpenRouter',
+                        'Groq',
+                        'British English',
+                        'American English',
+                        'Spanish',
+                        'Mac',
+                    ],
+                    acronyms: [...DEFAULT_ACRONYMS, 'CV', 'DOCX', 'GB'],
+                },
+            ],
         },
     },
     {
-        ignores: ['node_modules/', 'main.js', 'dist/'],
-    }
-);
+        // The build script runs in Node, where process is a global.
+        files: ['esbuild.config.mjs'],
+        languageOptions: { globals: { process: 'readonly' } },
+    },
+]);

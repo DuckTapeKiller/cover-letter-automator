@@ -1251,3 +1251,59 @@ body {
     order: -1;
     flex-basis: 100%;
 }
+
+/* Email step: the analysis summary and the refine block (formerly inline styles). */
+.cla-analysis-wrap.cla-email-analysis {
+    margin-bottom: 20px;
+}
+
+.cla-email-analysis .cla-score {
+    text-align: left;
+    font-size: 1rem;
+}
+
+.cla-refine-wrap {
+    margin-top: 30px;
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 20px;
+}
+
+.cla-refine-wrap .cla-refine-heading {
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.cla-refine-wrap .cla-refine-input {
+    height: 60px;
+    width: 100%;
+}
+
+.cla-refine-wrap .cla-refine-btn {
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* Settings: full-width text boxes and settings whose control sits under the label. */
+.setting-item textarea.cla-settings-textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.setting-item textarea.cla-mono {
+    font-family: monospace;
+}
+
+.setting-item.cla-stacked-setting {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.setting-item.cla-stacked-setting > .setting-item-control {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.cla-refine-wrap .cla-refine-heading::before {
+    content: '◈ ';
+}

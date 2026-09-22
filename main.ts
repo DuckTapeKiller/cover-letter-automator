@@ -1,5 +1,7 @@
-import { Plugin, TFile, Notice, Modal, App, setIcon, requestUrl } from 'obsidian';
+import { Plugin, TFile, Notice, Modal, App, Menu, setIcon, requestUrl } from 'obsidian';
 import type { RequestUrlResponse } from 'obsidian';
+import type { IImageOptions } from 'docx';
+import type { BrowserWindowConstructor } from 'electron';
 // electron/node imports moved inside functions to prevent mobile crashes
 import { Platform } from 'obsidian';
 import { CoverLetterSettings, DEFAULT_SETTINGS, CoverLetterSettingTab } from './settings';
@@ -244,6 +246,18 @@ interface LlamaCppResponse {
     message?: unknown;
 }
 
+/** The part of an OpenAI-compatible chat completion the providers read. */
+interface ChatCompletionReply {
+    choices?: { message?: { content?: string } }[];
+}
+
+/** Obsidian's internal plugin registry, used to reveal a saved file in the file explorer. */
+interface InternalPluginsHost {
+    internalPlugins?: {
+        plugins: Record<string, { enabled?: boolean; instance: { revealInFolder(file: TFile): void } } | undefined>;
+    };
+}
+
 interface CoverLetterQualityResult {
     ok: boolean;
     reason: string;
@@ -334,10 +348,10 @@ function htmlToLooseText(v: string): string {
 }
 
 function yamlQuote(v: unknown): string {
-    return `"${(v ?? '').toString().replace(/\r?\n/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    return `"${asString(v).replace(/\r?\n/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-function extractJobFromPage(doc: globalThis.Document, url: string, pageTitle: string): ExtractedJob | null {
+function extractJobFromPage(doc: Document, url: string, pageTitle: string): ExtractedJob | null {
     const lower = (url || '').toLowerCase();
     if (lower.includes('careers.gov.je/job/')) return parseCareersGovJe(doc, url, pageTitle);
     if (lower.includes('www.gov.je/working/jobcareeradvice/pages/jobdetails.aspx'))
@@ -345,7 +359,7 @@ function extractJobFromPage(doc: globalThis.Document, url: string, pageTitle: st
     return null;
 }
 
-function parseCareersGovJe(doc: globalThis.Document, url: string, pageTitle: string): ExtractedJob {
+function parseCareersGovJe(doc: Document, url: string, pageTitle: string): ExtractedJob {
     const text = (sel: string) => (doc.querySelector(sel)?.textContent ?? '').replace(/\s+/g, ' ').trim();
     const attr = (sel: string, name: string) => (doc.querySelector(sel)?.getAttribute(name) ?? '').trim();
 
@@ -381,7 +395,7 @@ function parseCareersGovJe(doc: globalThis.Document, url: string, pageTitle: str
     return { title, company, descriptionText, frontmatter };
 }
 
-function parseGovJeJobDetails(doc: globalThis.Document, url: string, pageTitle: string): ExtractedJob {
+function parseGovJeJobDetails(doc: Document, url: string, pageTitle: string): ExtractedJob {
     const text = (sel: string) => (doc.querySelector(sel)?.textContent ?? '').replace(/\s+/g, ' ').trim();
     const html = (sel: string) => doc.querySelector(sel)?.innerHTML ?? '';
     const attrList = (sel: string, attr: string) =>
@@ -469,7 +483,7 @@ export default class CoverLetterPlugin extends Plugin {
         const trimmed = (text || '').trim();
         if (!trimmed) return '';
         try {
-            const data = JSON.parse(trimmed);
+            const data = JSON.parse(trimmed) as { error?: unknown } | null;
             if (typeof data?.error === 'string') return data.error;
         } catch {
             // plain-text HTTP body
@@ -600,19 +614,19 @@ export default class CoverLetterPlugin extends Plugin {
             else new Notice('Please open a job note first.');
         });
 
-        this.addRibbonIcon('briefcase', 'Job Dashboard', () => {
-            this.openJobDashboard();
+        this.addRibbonIcon('briefcase', 'Job dashboard', () => {
+            void this.openJobDashboard();
         });
 
         this.addCommand({
             id: 'import-job-url',
-            name: 'Import Job from URL',
+            name: 'Import job from URL',
             callback: () => new ImportUrlModal(this.app, this).open(),
         });
 
         this.addCommand({
             id: 'generate-cover-letter',
-            name: 'Generate Cover Letter',
+            name: 'Generate cover letter',
             callback: () => {
                 const f = this.app.workspace.getActiveFile();
                 if (f) new GeneratorModal(this.app, this, f).open();
@@ -621,13 +635,13 @@ export default class CoverLetterPlugin extends Plugin {
 
         this.addCommand({
             id: 'open-job-dashboard',
-            name: 'Open Job Dashboard',
+            name: 'Open job dashboard',
             callback: () => void this.openJobDashboard(),
         });
 
         this.addCommand({
             id: 'refresh-job-dashboard',
-            name: 'Refresh Job Dashboard',
+            name: 'Refresh job dashboard',
             callback: () =>
                 void this.refreshJobOffers({
                     notify: 'always',
@@ -635,10 +649,10 @@ export default class CoverLetterPlugin extends Plugin {
                 }),
         });
 
-        const addMenuItem = (menu: any, file: TFile) =>
-            menu.addItem((item: any) =>
+        const addMenuItem = (menu: Menu, file: TFile) =>
+            menu.addItem((item) =>
                 item
-                    .setTitle('Generate Cover Letter')
+                    .setTitle('Generate cover letter')
                     .setIcon('paper-plane')
                     .onClick(() => new GeneratorModal(this.app, this, file).open())
             );
@@ -657,7 +671,7 @@ export default class CoverLetterPlugin extends Plugin {
         this.registerMarkdownCodeBlockProcessor('generate-cl', (_src, el) => {
             el
                 .createDiv({ cls: 'cla-button-container' })
-                .createEl('button', { text: 'GENERATE COVER LETTER NOW', cls: 'cla-generate-btn' }).onclick = () => {
+                .createEl('button', { text: 'Generate cover letter now', cls: 'cla-generate-btn' }).onclick = () => {
                 const f = this.app.workspace.getActiveFile();
                 if (f) new GeneratorModal(this.app, this, f).open();
                 else new Notice('No active file found.');
@@ -665,7 +679,6 @@ export default class CoverLetterPlugin extends Plugin {
         });
 
         this.setupJobDashboardAutoRefresh();
-        console.log('Cover Letter Automator loaded');
     }
 
     updateStatusBar(text: string, pulse = false) {
@@ -861,7 +874,7 @@ export default class CoverLetterPlugin extends Plugin {
         return offers;
     }
 
-    parseGovJeJobsSearchResults(source: JobSource, doc: globalThis.Document): JobOffer[] {
+    parseGovJeJobsSearchResults(source: JobSource, doc: Document): JobOffer[] {
         const anchors = Array.from(doc.querySelectorAll('a[href]'));
         const offers: JobOffer[] = [];
         const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -1077,9 +1090,9 @@ export default class CoverLetterPlugin extends Plugin {
                     );
                     const match = anaRes.match(/\{[\s\S]*\}/);
                     if (match) {
-                        const data = JSON.parse(match[0]);
+                        const data = JSON.parse(match[0]) as { strategy?: unknown; gaps?: unknown; score?: unknown };
                         strategy = typeof data.strategy === 'string' ? data.strategy : '';
-                        gaps = Array.isArray(data.gaps) ? data.gaps : [];
+                        gaps = Array.isArray(data.gaps) ? (data.gaps as string[]) : [];
                         score = typeof data.score === 'number' ? data.score : 0;
                     }
                 } catch (e) {
@@ -1089,7 +1102,7 @@ export default class CoverLetterPlugin extends Plugin {
 
             if (this.settings.enableStrategyAnalysis) {
                 // Small delay to avoid 429 rate limits on high-speed providers (Groq)
-                await new Promise((res) => setTimeout(res, 1500));
+                await new Promise((res) => window.setTimeout(res, 1500));
             }
 
             onProgress(40);
@@ -1517,7 +1530,7 @@ export default class CoverLetterPlugin extends Plugin {
                     }),
                 signal
             );
-            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
+            const text = (response.json as ChatCompletionReply | null)?.choices?.[0]?.message?.content;
             if (!text) throw new Error('LM Studio returned an empty response.');
             return text;
         } catch (e: unknown) {
@@ -1543,10 +1556,10 @@ export default class CoverLetterPlugin extends Plugin {
                 signal: AbortSignal.timeout(5000),
             });
             if (!r.ok) return null;
-            const d = r.json;
-            const list = Array.isArray(d?.data) ? d.data : [];
-            return list.some((m: any) => m && m.id === model && m.state === 'loaded');
-        } catch (_e) {
+            const d = r.json as { data?: unknown } | null;
+            const list = Array.isArray(d?.data) ? (d.data as ({ id?: unknown; state?: unknown } | null)[]) : [];
+            return list.some((m) => m && m.id === model && m.state === 'loaded');
+        } catch {
             return null;
         }
     }
@@ -1564,11 +1577,11 @@ export default class CoverLetterPlugin extends Plugin {
                     signal: AbortSignal.timeout(600000),
                 });
                 if (r.ok) {
-                    const d = r.json;
+                    const d = r.json as { status?: unknown; instance_id?: unknown; type?: unknown } | null;
                     if (!d || d.status === 'loaded' || d.instance_id || d.type) return true;
                 }
                 if (r.status !== 404) break;
-            } catch (_e) {
+            } catch {
                 break;
             }
         }
@@ -1586,8 +1599,8 @@ export default class CoverLetterPlugin extends Plugin {
         try {
             const res = await requestUrl({ url });
             if (!res.ok) return [];
-            const data = res.json;
-            return data.models?.map((m: any) => m.name) || [];
+            const data = res.json as { models?: { name: string }[] };
+            return data.models?.map((m) => m.name) || [];
         } catch (e) {
             console.error('Failed to fetch Ollama models:', e);
             return [];
@@ -1596,26 +1609,23 @@ export default class CoverLetterPlugin extends Plugin {
 
     async fetchLmStudioModels(): Promise<string[]> {
         const base = this.normalizeLocalBaseUrl(this.settings.lmStudioUrl, 'http://127.0.0.1:1234/v1');
-        console.log(`[LM Studio] Fetching models from: ${base}/models`);
         try {
             const res = await requestUrl({
                 url: `${base}/models`,
                 throw: false,
             });
-            console.log(`[LM Studio] Response status: ${res.status}`);
             if (!res.ok) {
                 console.error(`[LM Studio] Server returned error: ${res.status}`);
                 return [];
             }
-            const data = res.json;
-            console.log(`[LM Studio] Response body:`, data);
+            const data = res.json as unknown;
             if (typeof data === 'string' && data.startsWith('<')) {
                 console.error(
                     'LM Studio returned HTML instead of JSON. Is the server running and configured correctly?'
                 );
                 return [];
             }
-            return (data?.data as { id: string }[])?.map((m) => m.id) || [];
+            return (data as { data?: { id: string }[] } | null)?.data?.map((m) => m.id) || [];
         } catch (e) {
             console.error('Failed to fetch LM Studio models:', e);
             return [];
@@ -1812,7 +1822,7 @@ export default class CoverLetterPlugin extends Plugin {
                     }),
                 signal
             );
-            const text = response.json?.content?.[0]?.text as string | undefined;
+            const text = (response.json as { content?: { text?: string }[] } | null)?.content?.[0]?.text;
             if (!text) throw new Error('Claude returned an empty response.');
             return text;
         } catch (e: unknown) {
@@ -1846,7 +1856,8 @@ export default class CoverLetterPlugin extends Plugin {
                     }),
                 signal
             );
-            const text = response.json?.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
+            const text = (response.json as { candidates?: { content?: { parts?: { text?: string }[] } }[] } | null)
+                ?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!text) throw new Error('Gemini returned an empty response.');
             return text;
         } catch (e: unknown) {
@@ -1948,7 +1959,7 @@ export default class CoverLetterPlugin extends Plugin {
                     }),
                 signal
             );
-            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
+            const text = (response.json as ChatCompletionReply | null)?.choices?.[0]?.message?.content;
             if (!text) throw new Error('Groq returned an empty response.');
             return text;
         } catch (e: unknown) {
@@ -1990,7 +2001,7 @@ export default class CoverLetterPlugin extends Plugin {
                     }),
                 signal
             );
-            const text = response.json?.choices?.[0]?.message?.content as string | undefined;
+            const text = (response.json as ChatCompletionReply | null)?.choices?.[0]?.message?.content;
             if (!text) throw new Error('OpenRouter returned an empty response.');
             return text;
         } catch (e: unknown) {
@@ -2122,7 +2133,7 @@ export default class CoverLetterPlugin extends Plugin {
                                                         height: sigHeight,
                                                     },
                                                     type: sigType,
-                                                } as any),
+                                                } as IImageOptions),
                                             ],
                                             spacing: { before: 0, after: 0 },
                                         }),
@@ -2137,11 +2148,8 @@ export default class CoverLetterPlugin extends Plugin {
             ],
         });
 
-        const nodeBuf = (await Packer.toBuffer(doc)) as Buffer;
-        const arrayBuffer = nodeBuf.buffer.slice(
-            nodeBuf.byteOffset,
-            nodeBuf.byteOffset + nodeBuf.byteLength
-        ) as ArrayBuffer;
+        const nodeBuf = await Packer.toBuffer(doc);
+        const arrayBuffer = nodeBuf.buffer.slice(nodeBuf.byteOffset, nodeBuf.byteOffset + nodeBuf.byteLength);
 
         const fileName = `COVER LETTER - ${this.settings.senderName} - ${title}.docx`.replace(/[\\/:*?"<>|]/g, '');
         const filePath = await this.resolveOutputPath(sourceFile, fileName);
@@ -2284,13 +2292,11 @@ export default class CoverLetterPlugin extends Plugin {
     private async renderPdfWithElectron(html: string, marginMm: number): Promise<ArrayBuffer> {
         if (!Platform.isDesktop) throw new Error('Electron PDF rendering is only available on desktop.');
 
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const electron = require('electron') as any;
-        let remote = electron.remote;
+        const electron = await import('electron');
+        let remote: { BrowserWindow?: BrowserWindowConstructor } | null | undefined = electron.remote;
         if (!remote?.BrowserWindow) {
             try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                remote = require('@electron/remote');
+                remote = await import('@electron/remote');
             } catch {
                 remote = null;
             }
@@ -2315,7 +2321,7 @@ export default class CoverLetterPlugin extends Plugin {
                 'document.fonts && document.fonts.ready ? document.fonts.ready.then(() => true) : true'
             );
             const marginInches = marginMm / 25.4;
-            const pdfData = (await win.webContents.printToPDF({
+            const pdfData = await win.webContents.printToPDF({
                 landscape: false,
                 displayHeaderFooter: false,
                 printBackground: true,
@@ -2328,8 +2334,8 @@ export default class CoverLetterPlugin extends Plugin {
                     left: marginInches,
                     right: marginInches,
                 },
-            })) as Uint8Array;
-            return pdfData.buffer.slice(pdfData.byteOffset, pdfData.byteOffset + pdfData.byteLength) as ArrayBuffer;
+            });
+            return pdfData.buffer.slice(pdfData.byteOffset, pdfData.byteOffset + pdfData.byteLength);
         } finally {
             if (!win.isDestroyed()) win.close();
         }
@@ -2337,21 +2343,21 @@ export default class CoverLetterPlugin extends Plugin {
 
     private async renderPdfWithHtml2PdfFallback(html: string, marginMm: number): Promise<ArrayBuffer> {
         const { default: html2pdf } = await import('html2pdf.js');
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        document.body.appendChild(div);
+        // Parsed rather than assigned to innerHTML; the div receives the same head styles and body content.
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        const div = document.body.createDiv();
+        div.append(...Array.from(parsed.head.childNodes), ...Array.from(parsed.body.childNodes));
+        // html2pdf's own types omit pagebreak and jsPDF.compress, which it supports.
+        const options = {
+            margin: marginMm,
+            filename: 'cover-letter.pdf',
+            image: { type: 'jpeg', quality: 1.0 },
+            html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff', letterRendering: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+            pagebreak: { mode: ['css'] },
+        } as const;
         try {
-            const blob: Blob = await (html2pdf() as any)
-                .from(div)
-                .set({
-                    margin: marginMm,
-                    filename: 'cover-letter.pdf',
-                    image: { type: 'jpeg', quality: 1.0 },
-                    html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff', letterRendering: true },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                    pagebreak: { mode: ['css'] },
-                })
-                .output('blob');
+            const blob = (await html2pdf().from(div).set(options).output('blob')) as Blob;
             return await blob.arrayBuffer();
         } finally {
             if (div.parentNode) document.body.removeChild(div);
@@ -2424,6 +2430,16 @@ export default class CoverLetterPlugin extends Plugin {
         }
     }
 
+    /** Electron and Node modules exist only on desktop; callers check Platform.isDesktop before this. */
+    private async loadDesktopModules() {
+        if (!Platform.isDesktop) throw new Error('This feature is only available on desktop.');
+        const { shell } = await import('electron');
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        return { shell, fs, os, path };
+    }
+
     private arrayBufferToBase64(buf: ArrayBuffer): string {
         const bytes = new Uint8Array(buf);
         let bin = '';
@@ -2444,20 +2460,13 @@ export default class CoverLetterPlugin extends Plugin {
             return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { shell } = require('electron') as { shell: { openPath: (path: string) => Promise<string> } };
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const fs = require('fs') as typeof import('fs');
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const os = require('os') as typeof import('os');
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const path = require('path') as typeof import('path');
+        const { shell, fs, os, path } = await this.loadDesktopModules();
 
         const { to, from, subject, body, attachments } = params;
         const boundary = `cla_${Date.now()}_boundary`;
 
         const toB64 = (buf: ArrayBuffer): string => this.arrayBufferToBase64(buf);
-        const strToB64 = (s: string): string => toB64(new TextEncoder().encode(s).buffer as ArrayBuffer);
+        const strToB64 = (s: string): string => toB64(new TextEncoder().encode(s).buffer);
 
         const wrapB64 = (b64: string): string => b64.match(/.{1,76}/g)?.join('\r\n') ?? b64;
 
@@ -2497,7 +2506,7 @@ export default class CoverLetterPlugin extends Plugin {
             if (err) throw new Error(`Could not open mail client: ${err}`);
 
             // Delayed cleanup for privacy
-            setTimeout(() => {
+            window.setTimeout(() => {
                 try {
                     fs.unlinkSync(tmpFile);
                 } catch {
@@ -2507,15 +2516,6 @@ export default class CoverLetterPlugin extends Plugin {
         } catch (e: unknown) {
             throw new Error(`Desktop integration failed: ${(e as Error).message}`);
         }
-    }
-
-    getAbsolutePath(vaultRelativePath: string): string {
-        if (!Platform.isDesktop) return vaultRelativePath;
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const path = require('path') as typeof import('path');
-        const adapter = this.app.vault.adapter as any;
-        const basePath: string = adapter.getBasePath?.() ?? '';
-        return path.join(basePath, vaultRelativePath);
     }
 
     private async resolveOutputPath(sourceFile: TFile, fileName: string): Promise<string> {
@@ -2532,11 +2532,11 @@ export default class CoverLetterPlugin extends Plugin {
     }
 
     private revealFile(file: TFile) {
-        const explorer = (this.app as any).internalPlugins?.plugins['file-explorer'];
+        const explorer = (this.app as unknown as InternalPluginsHost).internalPlugins?.plugins['file-explorer'];
         if (explorer?.enabled) explorer.instance.revealInFolder(file);
     }
 
-    private migrateLegacyApiKeysToSecretStorage(data: Record<string, any>): boolean {
+    private migrateLegacyApiKeysToSecretStorage(data: Record<string, unknown>): boolean {
         const mappings: Array<{ legacyField: string; secretIdField: string; defaultSecretId: string }> = [
             {
                 legacyField: 'claudeApiKey',
@@ -2584,7 +2584,7 @@ export default class CoverLetterPlugin extends Plugin {
             const secretId = (typeof secretIdRaw === 'string' ? secretIdRaw.trim() : '') || mapping.defaultSecretId;
 
             try {
-                (this.app as any).secretStorage?.setSecret(secretId, legacyValue);
+                this.app.secretStorage?.setSecret(secretId, legacyValue);
                 data[mapping.secretIdField] = secretId;
                 changed = true;
                 migratedCount += 1;
@@ -2599,14 +2599,14 @@ export default class CoverLetterPlugin extends Plugin {
             if (!currentValue || currentValue === mapping.defaultSecretId) continue;
 
             try {
-                const existingSecret = (this.app as any).secretStorage?.getSecret(currentValue);
+                const existingSecret = this.app.secretStorage?.getSecret(currentValue);
                 if (existingSecret) continue;
             } catch {
                 // Invalid secret IDs here are likely leaked API keys from older settings UI.
             }
 
             try {
-                (this.app as any).secretStorage?.setSecret(mapping.defaultSecretId, currentValue);
+                this.app.secretStorage?.setSecret(mapping.defaultSecretId, currentValue);
                 data[mapping.secretIdField] = mapping.defaultSecretId;
                 changed = true;
                 migratedCount += 1;
@@ -2625,8 +2625,9 @@ export default class CoverLetterPlugin extends Plugin {
     }
 
     async loadSettings() {
-        const raw = await this.loadData();
-        const data = raw && typeof raw === 'object' ? { ...(raw as any) } : {};
+        const raw = (await this.loadData()) as unknown;
+        const data: Record<string, unknown> =
+            raw && typeof raw === 'object' ? { ...(raw as Record<string, unknown>) } : {};
         let changed = this.migrateLegacyApiKeysToSecretStorage(data);
         if (
             !Object.prototype.hasOwnProperty.call(data, 'ollamaFirstTokenTimeoutSeconds') ||
@@ -2865,7 +2866,11 @@ MANDATORY REPAIR RULES:
 6. Start immediately with the first paragraph.`;
     }
 
-    static buildEmailPrompt(frontmatter: Record<string, any>, settings: CoverLetterSettings, tone?: string): string {
+    static buildEmailPrompt(
+        frontmatter: Record<string, unknown>,
+        settings: CoverLetterSettings,
+        tone?: string
+    ): string {
         const title = (frontmatter['Job Title'] as string) || 'the position';
         const company = (frontmatter.Company as string) || 'your organisation';
         const contact = (frontmatter.Contact as string) || '';
@@ -2984,7 +2989,7 @@ class JobDashboardModal extends Modal {
         const headerEl = this.contentEl.createDiv({ cls: 'cla-modal-header' });
         const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
         setIcon(logoEl, 'briefcase');
-        headerEl.createEl('h1', { text: 'Job Dashboard', cls: 'cla-title' });
+        headerEl.createEl('h1', { text: 'Job dashboard', cls: 'cla-title' });
 
         const subtitleEl = headerEl.createEl('p', { cls: 'cla-subtitle' });
         subtitleEl.setText('Loading…');
@@ -2999,7 +3004,7 @@ class JobDashboardModal extends Modal {
         regionSel.createEl('option', { value: 'Spain', text: 'Spain' });
         regionSel.value = this.region;
         regionSel.addEventListener('change', () => {
-            this.region = (regionSel.value || 'All') as any;
+            this.region = (regionSel.value || 'All') as 'All' | JobRegion;
             this.renderList();
         });
 
@@ -3020,7 +3025,7 @@ class JobDashboardModal extends Modal {
         displaySel.createEl('option', { value: 'list', text: 'List' });
         displaySel.value = this.displayMode;
         displaySel.addEventListener('change', () => {
-            this.displayMode = (displaySel.value || 'cards') as any;
+            this.displayMode = (displaySel.value || 'cards') as 'cards' | 'list';
             this.renderList();
         });
 
@@ -3047,7 +3052,7 @@ class JobDashboardModal extends Modal {
             const cb = wrap.createEl('input', { type: 'checkbox' });
             cb.checked = initial;
             cb.addEventListener('change', () => onChange(cb.checked));
-            wrap.createEl('span', { text: label });
+            wrap.createSpan({ text: label });
         };
         addToggle('New only', this.onlyNew, (v) => {
             this.onlyNew = v;
@@ -3167,7 +3172,7 @@ class JobDashboardModal extends Modal {
         });
         void refreshMatchModelList();
 
-        const parseJsonLoose = (raw: string): any => {
+        const parseJsonLoose = (raw: string): unknown => {
             const t = (raw || '').trim();
             if (!t) return null;
             try {
@@ -3252,7 +3257,9 @@ class JobDashboardModal extends Modal {
 
             const withoutParen =
                 (withoutDate || raw)
-                    .replace(/\s*\(([^)]+)\)\s*$/, (all, inner) => (/gov\.?\s*je|jobs|ass/i.test(inner) ? '' : all))
+                    .replace(/\s*\(([^)]+)\)\s*$/, (all: string, inner: string) =>
+                        /gov\.?\s*je|jobs|ass/i.test(inner) ? '' : all
+                    )
                     .trim() ||
                 withoutDate ||
                 raw;
@@ -3328,7 +3335,7 @@ class JobDashboardModal extends Modal {
 
             const profile = (this.plugin.settings.candidateProfile || '').trim();
             if (!profile) {
-                new Notice('Candidate profile is empty (Settings → Candidate profile).');
+                new Notice('Add your candidate profile in the plugin settings first.');
                 return;
             }
 
@@ -3384,8 +3391,10 @@ class JobDashboardModal extends Modal {
 
                     const prompt = buildMatchPrompt(profile, jobs);
                     const res = await this.plugin.generateWithAI(prompt, matchModel, matchProvider, true, true);
-                    const parsedRes = parseJsonLoose(res);
-                    const matches = Array.isArray(parsedRes?.matches) ? parsedRes.matches : [];
+                    const parsedRes = parseJsonLoose(res) as { matches?: unknown } | null;
+                    const matches = Array.isArray(parsedRes?.matches)
+                        ? (parsedRes.matches as ({ ref?: unknown; score?: unknown } | null)[])
+                        : [];
 
                     const seenRefs = new Set<string>();
                     for (const m of matches) {
@@ -3422,7 +3431,7 @@ class JobDashboardModal extends Modal {
 
         const listEl = this.contentEl.createDiv({ cls: 'cla-job-list' });
         const emptyEl = this.contentEl.createDiv({ cls: 'cla-job-empty' });
-        emptyEl.style.display = 'none';
+        emptyEl.hide();
         emptyEl.setText('No matching jobs.');
 
         const updateSubtitle = () => {
@@ -3470,8 +3479,7 @@ class JobDashboardModal extends Modal {
             if (!url) return;
             try {
                 if (Platform.isDesktop) {
-                    // eslint-disable-next-line @typescript-eslint/no-var-requires
-                    const { shell } = require('electron');
+                    const { shell } = await import('electron');
                     await shell.openExternal(url);
                 } else {
                     await navigator.clipboard.writeText(url);
@@ -3548,10 +3556,10 @@ class JobDashboardModal extends Modal {
                 ['Salary', details.Salary],
                 ['Contract', details.Contract],
                 ['Hours', details.Hours],
-                ['Entitled Work', (details as any)['Entitled Work']],
-                ['Closing Date', (details as any)['Closing Date'] || (details as any)['Close date']],
-                ['Apply online', (details as any)['Apply online']],
-                ['Job description', (details as any)['Job description']],
+                ['Entitled Work', details['Entitled Work']],
+                ['Closing Date', details['Closing Date'] || details['Close date']],
+                ['Apply online', details['Apply online']],
+                ['Job description', details['Job description']],
             ].filter(([, v]) => typeof v === 'string' && v.trim().length > 0) as Array<[string, string]>;
 
             const fileText = [
@@ -3672,7 +3680,7 @@ class JobDashboardModal extends Modal {
 
         const renderCore = () => {
             listEl.empty();
-            emptyEl.style.display = 'none';
+            emptyEl.hide();
             listEl.toggleClass('cla-job-list-mode-list', this.displayMode === 'list');
 
             const dismissed = new Set(this.plugin.settings.jobDashboardDismissedIds ?? []);
@@ -3681,7 +3689,7 @@ class JobDashboardModal extends Modal {
 
             const list = getFilteredOffers();
             if (list.length === 0) {
-                emptyEl.style.display = '';
+                emptyEl.show();
                 return;
             }
 
@@ -3702,14 +3710,14 @@ class JobDashboardModal extends Modal {
                 const description = (this.previewCache.get(offer.id) || offer.summary || '').trim();
                 const score = matchScores.get(offer.id);
 
-                const createIconBtn = (container: HTMLElement, icon: string, label: string, onClick: () => void) => {
+                const createIconBtn = (container: HTMLElement, icon: string, label: string, onClick: () => unknown) => {
                     const btn = container.createEl('button', { cls: 'cla-job-icon-btn' });
                     btn.setAttr('aria-label', label);
                     btn.setAttr('title', label);
                     setIcon(btn, icon);
                     btn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        onClick();
+                        void onClick();
                     });
                     return btn;
                 };
@@ -3857,7 +3865,7 @@ class JobDashboardModal extends Modal {
             renderCore();
         };
 
-        refreshBtn.addEventListener('click', async () => {
+        const refresh = async () => {
             setRefreshing(true);
             try {
                 const res = await this.plugin.refreshJobOffers({ notify: 'never', sources: getSelectedSources() });
@@ -3871,7 +3879,8 @@ class JobDashboardModal extends Modal {
             } finally {
                 setRefreshing(false);
             }
-        });
+        };
+        refreshBtn.addEventListener('click', () => void refresh());
 
         const cached = this.plugin.getCachedJobOffers();
         this.offers = cached.offers;
@@ -3921,7 +3930,7 @@ class GeneratorModal extends Modal {
 
     private setProgress(pct: number): void {
         this.progressPct = Math.max(0, Math.min(100, pct));
-        if (this.progressBarEl) this.progressBarEl.style.width = `${this.progressPct}%`;
+        this.progressBarEl?.setCssProps({ width: `${this.progressPct}%` });
     }
 
     private setStatus(text: string): void {
@@ -3974,26 +3983,26 @@ class GeneratorModal extends Modal {
             if (t === this.plugin.settings.defaultTone) opt.selected = true;
         });
 
-        c.createEl('label', { text: 'Professional Field:', cls: 'cla-label' });
+        c.createEl('label', { text: 'Professional field:', cls: 'cla-label' });
         const fieldWrapper = c.createDiv({ cls: 'cla-field-wrapper' });
         const fieldSel = fieldWrapper.createEl('select', { cls: 'cla-select' });
         this.plugin.settings.professionalFields.forEach((f) => {
             const opt = fieldSel.createEl('option', { text: f, value: f });
             if (f === this.plugin.settings.defaultField) opt.selected = true;
         });
-        fieldSel.createEl('option', { text: '+ Add Custom…', value: 'CUSTOM' });
+        fieldSel.createEl('option', { text: 'Add custom field…', value: 'CUSTOM' });
 
         const customIn = fieldWrapper.createEl('input', {
             type: 'text',
             placeholder: 'Custom field name…',
             cls: 'cla-input',
         });
-        customIn.style.display = 'none';
+        customIn.setCssProps({ display: 'none' });
         fieldSel.addEventListener('change', () => {
-            customIn.style.display = fieldSel.value === 'CUSTOM' ? 'block' : 'none';
+            customIn.setCssProps({ display: fieldSel.value === 'CUSTOM' ? 'block' : 'none' });
         });
 
-        c.createEl('label', { text: 'AI Provider:', cls: 'cla-label' });
+        c.createEl('label', { text: 'AI provider:', cls: 'cla-label' });
         const providerSel = c.createEl('select', { cls: 'cla-select' });
         const PROVIDER_LABELS: Record<string, string> = {
             gemini: 'GEMINI',
@@ -4050,7 +4059,7 @@ class GeneratorModal extends Modal {
                         modelSel.value = savedModel;
                     } else {
                         modelSel.createEl('option', {
-                            text: '— Start LM Studio server and load a model first —',
+                            text: 'No models found. Start the LM Studio server and load a model.',
                             value: '',
                         });
                     }
@@ -4088,20 +4097,20 @@ class GeneratorModal extends Modal {
         };
 
         await updateModels();
-        providerSel.addEventListener('change', () => updateModels());
+        providerSel.addEventListener('change', () => void updateModels());
 
-        c.createEl('label', { text: 'Export Format:', cls: 'cla-label' });
+        c.createEl('label', { text: 'Export format:', cls: 'cla-label' });
         const fmtSel = c.createEl('select', { cls: 'cla-select' });
-        fmtSel.createEl('option', { text: 'PDF Document (.pdf)', value: 'PDF' });
-        fmtSel.createEl('option', { text: 'Word Document (.docx)', value: 'DOCX' });
+        fmtSel.createEl('option', { text: 'PDF document', value: 'PDF' });
+        fmtSel.createEl('option', { text: 'Word document (DOCX)', value: 'DOCX' });
 
-        c.createEl('label', { text: 'CV to Attach:', cls: 'cla-label' });
+        c.createEl('label', { text: 'CV to attach:', cls: 'cla-label' });
         const cvSel = c.createEl('select', { cls: 'cla-select' });
         this.plugin.settings.cvPaths.forEach((cv) => {
             cvSel.createEl('option', { text: cv.name, value: cv.path });
         });
         if (this.plugin.settings.cvPaths.length === 0) {
-            cvSel.createEl('option', { text: 'No CVs in Library — Check Settings', value: '' });
+            cvSel.createEl('option', { text: 'No CVs in library — check settings', value: '' });
         }
 
         const secondaryActionsWrap = c.createDiv({ cls: 'cla-secondary-actions-wrap' });
@@ -4116,7 +4125,7 @@ class GeneratorModal extends Modal {
         this.updateTimerText();
 
         const analysisWrap = c.createDiv({ cls: 'cla-analysis-wrap' });
-        analysisWrap.style.display = 'none';
+        analysisWrap.setCssProps({ display: 'none' });
 
         const btnRow = this.modalEl.createDiv({ cls: 'cla-btn-row' });
         const btn = btnRow.createEl('button', { cls: 'cla-btn' });
@@ -4141,18 +4150,13 @@ class GeneratorModal extends Modal {
             const af = this.plugin.app.vault.getAbstractFileByPath(this.generated.path);
             if (!(af instanceof TFile)) return;
             try {
-                // Prefer user-configured delete behavior if available
-                await (this.plugin.app as any).fileManager?.trashFile?.(af);
+                await this.plugin.app.fileManager.trashFile(af);
             } catch {
-                try {
-                    await this.plugin.app.vault.delete(af);
-                } catch {
-                    // ignore
-                }
+                // ignore
             }
         };
 
-        cancelBtn.addEventListener('click', async () => {
+        cancelBtn.addEventListener('click', () => {
             if (!this.working) {
                 this.close();
                 return;
@@ -4164,7 +4168,7 @@ class GeneratorModal extends Modal {
             this.setStatus('Cancellation requested — finishing current step…');
         });
 
-        btn.addEventListener('click', async () => {
+        const generate = async () => {
             if (this.working) return;
             let field = fieldSel.value;
             const fmt = fmtSel.value as 'DOCX' | 'PDF';
@@ -4203,7 +4207,7 @@ class GeneratorModal extends Modal {
 
             // Simulation interval for the "Thinking" phase
             let currentPct = 10;
-            const progInterval = setInterval(() => {
+            const progInterval = window.setInterval(() => {
                 if (currentPct < 75) {
                     currentPct += Math.random() * 2;
                     if (currentPct > 75) currentPct = 75;
@@ -4237,14 +4241,14 @@ class GeneratorModal extends Modal {
 
                 if (this.cancelled) {
                     this.setStatus('Cancelled — deleting draft…');
-                    clearInterval(progInterval);
+                    window.clearInterval(progInterval);
                     await deleteGenerated();
                     this.plugin.clearActiveGeneratorModal(this, 'Cancelled');
                     this.close();
                     return;
                 }
 
-                clearInterval(progInterval);
+                window.clearInterval(progInterval);
                 this.setProgress(100);
                 const elapsedMs = Date.now() - this.generationStartedAt;
                 this.plugin.settings.lastCoverLetterGenerationMs = elapsedMs;
@@ -4256,12 +4260,12 @@ class GeneratorModal extends Modal {
                 this.plugin.clearActiveGeneratorModal(this, `Done ${this.plugin.formatDuration(elapsedMs)}`);
 
                 const fm = this.plugin.app.metadataCache.getFileCache(this.file)?.frontmatter ?? {};
-                setTimeout(() => {
+                window.setTimeout(() => {
                     this.close();
                     new EmailDraftModal(this.app, this.plugin, fm, result, cvPath, this.file, toneSel.value).open();
                 }, 1000);
             } catch (e: unknown) {
-                clearInterval(progInterval);
+                window.clearInterval(progInterval);
                 this.setStatus(this.cancelled ? 'Cancelled.' : `Error: ${(e as Error).message}`);
                 btn.disabled = false;
                 btnText.setText(' Retry');
@@ -4274,10 +4278,11 @@ class GeneratorModal extends Modal {
                 this.abortController = null;
                 this.stopElapsedTimer();
             }
-        });
+        };
+        btn.addEventListener('click', () => void generate());
 
         // ─── Phase 1: Background Extraction & Match Analysis ─────────────────
-        this.plugin.app.vault.read(this.file).then((body) => {
+        void this.plugin.app.vault.read(this.file).then((body) => {
             const fm = this.plugin.app.metadataCache.getFileCache(this.file)?.frontmatter ?? {};
             const jobContent = body.replace(/^---[\s\S]*?---\n*/, '').trim();
             if (!jobContent) return;
@@ -4304,7 +4309,12 @@ class GeneratorModal extends Modal {
                         try {
                             const match = jsonStr.match(/\{[\s\S]*\}/);
                             if (!match) throw new Error('No JSON block found.');
-                            const data = JSON.parse(match[0]);
+                            const data = JSON.parse(match[0]) as {
+                                email?: string;
+                                contactName?: string;
+                                reference?: string;
+                                company?: string;
+                            };
                             if (data.email || data.contactName || data.reference || data.company) {
                                 const updateBtn = c.createEl('button', {
                                     cls: 'cla-btn-mini',
@@ -4312,12 +4322,15 @@ class GeneratorModal extends Modal {
                                 setIcon(updateBtn, 'file-check');
                                 updateBtn.createSpan({ text: ' Found missing info — Update Note?' });
                                 updateBtn.onclick = async () => {
-                                    await this.plugin.app.fileManager.processFrontMatter(this.file, (fm) => {
-                                        if (data.email && !fm.Email) fm.Email = data.email;
-                                        if (data.contactName && !fm.Contact) fm.Contact = data.contactName;
-                                        if (data.reference && !fm.Ref) fm.Ref = data.reference;
-                                        if (data.company && !fm.Company) fm.Company = data.company;
-                                    });
+                                    await this.plugin.app.fileManager.processFrontMatter(
+                                        this.file,
+                                        (fm: Record<string, unknown>) => {
+                                            if (data.email && !fm.Email) fm.Email = data.email;
+                                            if (data.contactName && !fm.Contact) fm.Contact = data.contactName;
+                                            if (data.reference && !fm.Ref) fm.Ref = data.reference;
+                                            if (data.company && !fm.Company) fm.Company = data.company;
+                                        }
+                                    );
                                     updateBtn.remove();
                                     new Notice('Note updated with extracted info.');
                                 };
@@ -4331,7 +4344,7 @@ class GeneratorModal extends Modal {
                         }
                     } catch (e) {
                         extractBtn.disabled = false;
-                        extractText.setText(' Find failed — Retry?');
+                        extractText.setText(' Find failed — retry?');
                         new Notice(`Missing info extraction failed: ${(e as Error).message}`);
                     }
                 };
@@ -4361,15 +4374,15 @@ class GeneratorModal extends Modal {
                     if (!jsonMatch)
                         throw new Error(`No JSON block found in AI response. Snippet: "${res.slice(0, 50)}..."`);
 
-                    let data;
+                    let data: { score?: number; strategy?: string; gaps?: string[] };
                     try {
-                        data = JSON.parse(jsonMatch[0]);
+                        data = JSON.parse(jsonMatch[0]) as typeof data;
                     } catch {
                         throw new Error(`JSON Syntax Error. Snippet: "${res.slice(0, 50)}..."`);
                     }
 
                     analysisWrap.empty();
-                    analysisWrap.style.display = 'block';
+                    analysisWrap.setCssProps({ display: 'block' });
                     analysisWrap.createEl('h3', { text: `Match Score: ${data.score}%`, cls: 'cla-score' });
                     analysisWrap.createEl('p', { text: `Strategy: ${data.strategy}`, cls: 'cla-strategy' });
                     if (data.gaps?.length) {
@@ -4378,7 +4391,7 @@ class GeneratorModal extends Modal {
                     anaBtn.remove();
                 } catch (e) {
                     anaBtn.disabled = false;
-                    anaText.setText(' Analysis failed — Retry?');
+                    anaText.setText(' Analysis failed — retry?');
                     new Notice(`Analysis Error: ${(e as Error).message}`);
                 }
             };
@@ -4390,7 +4403,7 @@ class GeneratorModal extends Modal {
             prepBtn.onclick = async () => {
                 if (!this.plugin.confirmCloudCandidateData(providerSel.value, 'interview preparation')) return;
                 prepBtn.disabled = true;
-                prepText.setText(' Generating Playbook…');
+                prepText.setText(' Generating playbook…');
                 try {
                     const playbook = await this.plugin.generateWithAI(
                         PromptBuilder.buildInterviewPrepPrompt(jobContent, this.plugin.settings),
@@ -4412,11 +4425,11 @@ class GeneratorModal extends Modal {
 
                     const file = await this.plugin.app.vault.create(path, playbook);
                     new Notice(`Playbook created: ${path}`);
-                    this.plugin.app.workspace.getLeaf().openFile(file);
-                    prepText.setText(' Playbook Created ✓');
+                    void this.plugin.app.workspace.getLeaf().openFile(file);
+                    prepText.setText(' Playbook created ✓');
                 } catch (e) {
                     prepBtn.disabled = false;
-                    prepText.setText(' Prep failed — Retry?');
+                    prepText.setText(' Prep failed — retry?');
                     new Notice(`Interview Prep failed: ${(e as Error).message}`);
                 }
             };
@@ -4450,10 +4463,10 @@ class ImportUrlModal extends Modal {
         const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
         const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
         setIcon(logoEl, 'wand-sparkles');
-        headerEl.createEl('h1', { text: 'Import Job from URL', cls: 'cla-title' });
+        headerEl.createEl('h1', { text: 'Import job from URL', cls: 'cla-title' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
-        c.createEl('label', { text: 'Job Posting URL:', cls: 'cla-label' });
+        c.createEl('label', { text: 'Job posting URL:', cls: 'cla-label' });
         const urlIn = c.createEl('input', {
             type: 'url',
             placeholder: 'https://careers.gov.je/job/…',
@@ -4537,7 +4550,7 @@ class ImportUrlModal extends Modal {
 
                 const file = await this.app.vault.create(notePath, content);
                 new Notice(`Job imported: ${notePath}`);
-                this.app.workspace.getLeaf().openFile(file);
+                void this.app.workspace.getLeaf().openFile(file);
                 this.close();
             } catch (e) {
                 status.setText(`Error: ${(e as Error).message}`);
@@ -4574,21 +4587,18 @@ class EmailDraftModal extends Modal {
         const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
         const logoEl = headerEl.createDiv({ cls: 'cla-modal-logo' });
         setIcon(logoEl, 'wand-sparkles');
-        headerEl.createEl('h1', { text: 'Send Application Email', cls: 'cla-title' });
+        headerEl.createEl('h1', { text: 'Send application email', cls: 'cla-title' });
 
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
 
         // — Strategic Analysis Dashboard —
         if (this.coverLetterFile.analysis) {
             const ana = this.coverLetterFile.analysis;
-            const wrap = c.createDiv({ cls: 'cla-analysis-wrap' });
-            wrap.style.marginBottom = '20px';
-            const strategyHeading = wrap.createEl('h3', {
+            const wrap = c.createDiv({ cls: 'cla-analysis-wrap cla-email-analysis' });
+            wrap.createEl('h3', {
                 text: `Match Strategy (${ana.score}%)`,
                 cls: 'cla-score',
             });
-            strategyHeading.style.textAlign = 'left';
-            strategyHeading.style.fontSize = '1rem';
             wrap.createEl('p', { text: ana.strategy, cls: 'cla-strategy' });
             if (ana.gaps?.length) {
                 wrap.createEl('p', { text: `Focus: Mitigate gaps in ${ana.gaps.join(', ')}`, cls: 'cla-gaps' });
@@ -4689,7 +4699,7 @@ class EmailDraftModal extends Modal {
 
         closeBtn.addEventListener('click', () => this.close());
 
-        openBtn.addEventListener('click', async () => {
+        const openMail = async () => {
             const to = toIn.value.trim();
             if (!to) {
                 new Notice('Recipient email is empty.');
@@ -4742,7 +4752,8 @@ class EmailDraftModal extends Modal {
                 closeBtn.disabled = false;
                 openText.setText(' Retry');
             }
-        });
+        };
+        openBtn.addEventListener('click', () => void openMail());
 
         // Generate body in background — enable button when ready
         this.plugin
@@ -4761,23 +4772,16 @@ class EmailDraftModal extends Modal {
 
         // — Refinement Section —
         const refineWrap = c.createDiv({ cls: 'cla-refine-wrap' });
-        refineWrap.style.marginTop = '30px';
-        refineWrap.style.borderTop = '1px solid var(--background-modifier-border)';
-        refineWrap.style.paddingTop = '20px';
-        const refineHeading = refineWrap.createEl('h4', { text: '◈ Missed something? Refine the Letter' });
-        refineHeading.style.marginBottom = '10px';
-        refineHeading.style.fontSize = '0.9rem';
-        refineHeading.style.opacity = '0.8';
+        refineWrap.createEl('h4', {
+            text: 'Missed something? Refine the letter',
+            cls: 'cla-refine-heading',
+        });
         const refineInput = refineWrap.createEl('textarea', {
-            cls: 'cla-input',
+            cls: 'cla-input cla-refine-input',
             placeholder: 'e.g. "Focus more on my retail experience at Waitrose..." or "Make it shorter"',
         });
-        refineInput.style.height = '60px';
-        refineInput.style.width = '100%';
 
-        const refineBtn = refineWrap.createEl('button', { cls: 'cla-btn cla-btn-secondary' });
-        refineBtn.style.width = '100%';
-        refineBtn.style.marginTop = '10px';
+        const refineBtn = refineWrap.createEl('button', { cls: 'cla-btn cla-btn-secondary cla-refine-btn' });
         setIcon(refineBtn, 'refresh-cw');
         const refineText = refineBtn.createSpan({ text: ' Regenerate with Feedback' });
 
@@ -4860,7 +4864,7 @@ EDUCATION: ${s.candidateEducation}
                 ).open();
             } catch (e) {
                 refineBtn.disabled = false;
-                refineBtn.setText('Refinement failed — Retry?');
+                refineBtn.setText('Refinement failed — retry?');
                 new Notice(`Error: ${(e as Error).message}`);
             }
         };
