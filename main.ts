@@ -4444,7 +4444,7 @@ class ImportUrlModal extends Modal {
     }
 
     onOpen() {
-        this.modalEl.addClass('cla-modal');
+        this.modalEl.addClass('cla-modal', 'cla-sheet-modal');
         const { contentEl } = this;
 
         const headerEl = contentEl.createDiv({ cls: 'cla-modal-header' });
@@ -4455,9 +4455,13 @@ class ImportUrlModal extends Modal {
         const c = contentEl.createDiv({ cls: 'cla-modal-container' });
         c.createEl('label', { text: 'Job Posting URL:', cls: 'cla-label' });
         const urlIn = c.createEl('input', {
-            type: 'text',
-            placeholder: 'https://linkedin.com/jobs/...',
+            type: 'url',
+            placeholder: 'https://careers.gov.je/job/…',
             cls: 'cla-input',
+        });
+        c.createEl('p', {
+            text: 'Reads job pages from gov.je and careers.gov.je; other sites are not supported yet.',
+            cls: 'cla-hint',
         });
 
         const status = c.createEl('p', { text: '', cls: 'cla-status-text' });
@@ -4651,7 +4655,7 @@ class EmailDraftModal extends Modal {
         } else {
             const attW2 = attList.createDiv({ cls: 'cla-attach-item cla-attach-warn' });
             setIcon(attW2, 'alert-triangle');
-            attW2.createSpan({ text: ' No CV path set — go to Settings → Email' });
+            attW2.createSpan({ text: ' No CV selected — add one under Settings → Letters' });
         }
 
         const status = c.createEl('p', { cls: 'cla-status-text', text: '' });
@@ -4724,7 +4728,11 @@ class EmailDraftModal extends Modal {
                     window.open(mailto);
                 }
 
-                status.setText('Mail app opened with attachments loaded.');
+                status.setText(
+                    Platform.isDesktop
+                        ? 'Mail app opened with attachments loaded.'
+                        : 'Mail app opened. Mail links cannot carry files, so attach the letter and CV from your vault.'
+                );
                 openText.setText(' Opened ✓');
                 openBtn.disabled = false;
                 closeBtn.disabled = false;

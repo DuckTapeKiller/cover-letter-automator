@@ -1102,3 +1102,152 @@ body {
     width: auto;
     min-width: 0;
 }
+
+/* ── Phones ─────────────────────────────────────────────────────────────────
+   Each modal becomes a full-screen sheet: Obsidian's close button stays at the
+   top, the form scrolls in the middle, and the action buttons stay on screen. */
+
+.is-phone .cla-modal {
+    --cla-modal-padding-x: var(--size-4-4, 1rem);
+    --cla-modal-padding-y: var(--size-4-3, 0.75rem);
+    --cla-btn-min-width: 0;
+    --cla-secondary-btn-min-width: 100%;
+}
+
+.is-phone .modal.cla-modal,
+.is-phone .modal.cla-modal.cla-generator-modal,
+.is-phone .modal.cla-modal.cla-job-dashboard {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100%;
+    max-height: 100% !important;
+    border-radius: 0;
+}
+
+/* Full-height sheets start under the status bar, and Obsidian pins its close button
+   to the top edge, so both move down by the safe-area inset. */
+.is-phone .modal.cla-modal:not(.cla-sheet-modal) {
+    padding-top: var(--safe-area-inset-top, 0px) !important;
+}
+
+.is-phone .modal.cla-modal:not(.cla-sheet-modal) .modal-header-button {
+    top: calc(var(--safe-area-inset-top, 0px) + var(--size-2-3, 8px));
+}
+
+.is-phone .modal.cla-modal .cla-btn-row {
+    flex-wrap: nowrap;
+    gap: var(--size-4-2, 0.5rem);
+    padding: var(--size-4-3, 0.75rem) var(--cla-modal-padding-x)
+        calc(var(--size-4-3, 0.75rem) + var(--safe-area-inset-bottom, 0px)) !important;
+    border-top: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+}
+
+.is-phone .modal.cla-modal .cla-btn-row .cla-btn {
+    flex: 2 1 0;
+    min-width: 0;
+    padding-inline: var(--size-4-2, 0.5rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The main action gets two thirds of the row; Close and Copy share the rest. */
+.is-phone .modal.cla-modal .cla-btn-row .cla-btn.cla-btn-secondary {
+    flex: 1 1 0;
+}
+
+.is-phone .cla-modal-header {
+    margin-bottom: var(--size-4-3, 0.75rem);
+}
+
+.is-phone .cla-modal-logo {
+    display: none;
+}
+
+.is-phone .cla-title {
+    font-size: 1.1rem;
+}
+
+.is-phone .cla-subtitle {
+    margin-bottom: var(--size-4-2, 0.5rem);
+}
+
+.is-phone .cla-secondary-actions-wrap .cla-btn {
+    flex: 1 1 100%;
+}
+
+/* The job dashboard scrolls as one page instead of squeezing its list into a small box. */
+.is-phone .modal.cla-modal.cla-job-dashboard .modal-content {
+    display: block !important;
+    overflow-y: auto !important;
+    padding: var(--cla-modal-padding-y) var(--cla-modal-padding-x) !important;
+}
+
+.is-phone .modal.cla-modal.cla-job-dashboard .cla-job-list {
+    overflow: visible !important;
+}
+
+.is-phone .cla-job-control,
+.is-phone .cla-job-grow {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+}
+
+.is-phone .cla-job-control-btn-wrap {
+    flex: 1 1 100%;
+}
+
+.is-phone .cla-job-refresh {
+    width: 100%;
+    justify-content: center;
+}
+
+.is-phone .cla-job-match-controls {
+    flex: 1 1 100%;
+}
+
+.is-phone .cla-job-match-controls .cla-select,
+.is-phone .cla-job-match-controls .cla-job-match-model {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    max-width: none;
+}
+
+.is-phone .cla-job-match-controls .cla-job-find-matches {
+    flex: 1 1 100%;
+}
+
+/* Card footer: the match score gets its own line and all six actions fit on one row. */
+.is-phone .cla-job-card-footer {
+    flex-wrap: wrap;
+}
+
+.is-phone .cla-job-card-actions {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+}
+
+/* Short forms open as a bottom sheet sized to their content. */
+.is-phone .modal.cla-modal.cla-sheet-modal {
+    height: auto;
+    margin-top: auto;
+    border-radius: var(--cla-radius-modal) var(--cla-radius-modal) 0 0;
+}
+
+.cla-hint {
+    margin: var(--size-4-2, 0.5rem) 0 0;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+/* Three actions: the main one takes the first line, the other two share the second. */
+.is-phone .modal.cla-modal .cla-btn-row:has(> .cla-btn:nth-child(3)) {
+    flex-wrap: wrap;
+}
+
+.is-phone .modal.cla-modal .cla-btn-row:has(> .cla-btn:nth-child(3)) > .cla-btn:not(.cla-btn-secondary) {
+    order: -1;
+    flex-basis: 100%;
+}
